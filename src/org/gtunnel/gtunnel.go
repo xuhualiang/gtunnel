@@ -11,19 +11,19 @@ import (
 const (
 	DIAL_TIMEOUT = time.Second * 2
 	IO_TIMEOUT   = time.Second * 1
+
+	BUF_SIZE  = 256 * 1024
 )
 
 type Wire struct {
-	buf    [4096]byte
-	data   []byte
-	dataTo net.Conn
-
 	src net.Conn
 	dst net.Conn
 
+	fwb *rwbuf
+	bwb *rwbuf
+
 	atime  time.Time
-	closed chan bool
-	ready  chan bool
+	closed bool
 }
 
 func deadline(duration time.Duration) time.Time {
@@ -31,22 +31,23 @@ func deadline(duration time.Duration) time.Time {
 }
 
 func (wire *Wire) Close() {
-	wire.closed <- true
+	wire.closed = true
 	wire.src.Close()
 	wire.dst.Close()
 }
 
 func mkWire(src net.Conn, dst net.Conn) *Wire {
-	// timeout for io
-	src.SetDeadline(deadline(IO_TIMEOUT))
-	dst.SetDeadline(deadline(IO_TIMEOUT))
+	// don't block on write
+	src.SetWriteDeadline(time.Time{})
+	dst.SetWriteDeadline(time.Time{})
 
 	wire := &Wire{
 		src:   src,
 		dst:   dst,
+		fwb:   NewRWBuf(BUF_SIZE),
+		bwb:   NewRWBuf(BUF_SIZE),
 		atime: time.Now(),
 	}
-	wire.ready <- true
 
 	return wire
 }
@@ -81,55 +82,36 @@ func dial(ep *Endpoint) (net.Conn, error) {
 	}
 }
 
-func readLoop(wire *Wire, from net.Conn, to net.Conn, forwardQueue chan *Wire) {
+func readLoop(wire *Wire, rwb *rwbuf, from net.Conn, to net.Conn) {
 	for {
-		select {
-		case <-wire.ready:
-			n, err := from.Read(wire.buf[:])
+		b := rwb.Writter()
+		if len(b) > 0 {
+			n, err := from.Read(b)
 			if err != nil {
-				fmt.Printf("error on wire %s %s\n", wire, err)
-				wire.Close()
+				fmt.Printf("failed to read %s\n, close connection %s", err, wire)
 				break
 			}
-			if n > 0 {
-				wire.data = wire.buf[:n]
-				wire.dataTo = to
-				wire.atime = time.Now()
-				forwardQueue <- wire
-			} else {
+			rwb.Write(uint64(n))
+		}
 
+		b = rwb.Reader()
+		if len(b) > 0 {
+			n, err := to.Write(b)
+			if err != nil {
+				fmt.Printf("failed to write %s\n, close connection %s", err, wire)
+				break
 			}
-
-		case <-wire.closed:
-			wire.closed <- true
-			break
+			rwb.Read(uint64(n))
 		}
+	}
+
+	if !wire.closed {
+		wire.Close()
 	}
 }
 
-func writeLoop(forwardQueue chan *Wire) {
-	for {
-		wire := <-forwardQueue
-
-		n, err := wire.dataTo.Write(wire.data)
-		if err != nil {
-			wire.Close()
-			continue
-		}
-
-		if n < len(wire.data) {
-			wire.data = wire.data[:n]
-			forwardQueue <- wire
-		} else {
-			wire.data = wire.buf[0:0]
-			wire.dataTo = nil
-			wire.ready <- true
-		}
-	}
-}
-
-func listenLoop(cfg Cfg, forwardQueue chan *Wire) {
-	listenSock, err := listen(&cfg)
+func listenLoop(cfg *Cfg) {
+	listenSock, err := listen(cfg)
 	if err != nil {
 		fmt.Printf("failed to listen on %s, error - %s\n", cfg.String(), err)
 		return
@@ -151,8 +133,8 @@ func listenLoop(cfg Cfg, forwardQueue chan *Wire) {
 			}
 
 			wire := mkWire(in, out)
-			go readLoop(wire, wire.src, wire.dst, forwardQueue)
-			go readLoop(wire, wire.dst, wire.src, forwardQueue)
+			go readLoop(wire, wire.fwb, wire.src, wire.dst)
+			go readLoop(wire, wire.bwb, wire.dst, wire.src)
 		}()
 
 		fmt.Printf("listening on %s\n", cfg.Accept.String())
@@ -166,11 +148,14 @@ func main() {
 	err := cfg.Load(flag.Args())
 	assert(err == nil, fmt.Sprintf("failed to load configuration %s", err))
 
-	forwardQueue := make(chan *Wire, 4096)
-
-	for _, c := range cfg.Set {
-		go listenLoop(c, forwardQueue)
+	for i, _ := range cfg.Set {
+		go listenLoop(&cfg.Set[i])
 	}
 
-	writeLoop(forwardQueue)
+	ticker := time.NewTicker(time.Second * 5)
+	for {
+		select {
+		case <-ticker.C:
+		}
+	}
 }
