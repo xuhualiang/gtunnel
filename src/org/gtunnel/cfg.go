@@ -23,9 +23,9 @@ type Endpoint struct {
 
 func (ep *Endpoint) String() string {
 	if ep.SSL {
-		return fmt.Sprintf("%s:s", ep.Addr.String())
+		return fmt.Sprintf("%s", ep.Addr.String())
 	} else {
-		return fmt.Sprintf("%s:p", ep.Addr.String())
+		return fmt.Sprintf("%s", ep.Addr.String())
 	}
 }
 

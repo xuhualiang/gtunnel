@@ -55,9 +55,15 @@ func (wire *Wire) String() string {
 	return fmt.Sprintf("%s/%s", wire.src, wire.dst)
 }
 
-func listen(ep *Endpoint) (net.Listener, error) {
+func listen(cfg *Cfg) (net.Listener, error) {
+	ep := &cfg.Accept
+
 	if ep.SSL {
-		cfg := tls.Config{}
+		cert, err := tls.LoadX509KeyPair(cfg.Cert, cfg.Key)
+		if err != nil {
+			return nil, err
+		}
+		cfg := tls.Config{Certificates: []tls.Certificate{cert}}
 		return tls.Listen("tcp", ep.String(), &cfg)
 	} else {
 		return net.Listen("tcp", ep.String())
@@ -122,24 +128,25 @@ func writeLoop(forwardQueue chan *Wire) {
 	}
 }
 
-func one(c *Cfg, forwardQueue chan *Wire) {
-	listenSock, err := listen(&c.Accept)
+func listenLoop(cfg Cfg, forwardQueue chan *Wire) {
+	listenSock, err := listen(&cfg)
 	if err != nil {
-		fmt.Printf("failed to listen on %s\n", c.Accept.String())
+		fmt.Printf("failed to listen on %s, error - %s\n", cfg.String(), err)
 		return
 	}
+	fmt.Printf("listening on %s\n", cfg.String())
 
 	for {
 		in, err := listenSock.Accept()
 		if err != nil {
-			fmt.Printf("failed to accept %s, error - %s\n", c.Accept.String(), err)
+			fmt.Printf("failed to accept %s, error - %s\n", cfg.Accept.String(), err)
 			continue
 		}
 		go func() {
-			out, err := dial(&c.Connect)
+			out, err := dial(&cfg.Connect)
 			if err != nil {
 				in.Close()
-				fmt.Printf("failed to wire %s, error - %s\n", c.String(), err)
+				fmt.Printf("failed to wire %s, error - %s\n", cfg.String(), err)
 				return
 			}
 
@@ -148,7 +155,7 @@ func one(c *Cfg, forwardQueue chan *Wire) {
 			go readLoop(wire, wire.dst, wire.src, forwardQueue)
 		}()
 
-		fmt.Printf("listening on %s\n", c.Accept.String())
+		fmt.Printf("listening on %s\n", cfg.Accept.String())
 	}
 }
 
@@ -162,7 +169,7 @@ func main() {
 	forwardQueue := make(chan *Wire, 4096)
 
 	for _, c := range cfg.Set {
-		go one(&c, forwardQueue)
+		go listenLoop(c, forwardQueue)
 	}
 
 	writeLoop(forwardQueue)
