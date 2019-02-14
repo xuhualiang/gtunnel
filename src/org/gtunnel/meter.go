@@ -9,7 +9,9 @@ type meter struct {
 }
 
 func NewMeter() *meter {
-	m := &meter{}
+	m := &meter{
+		C: make(chan bool, 1),
+	}
 	m.C <- true
 	return m
 }

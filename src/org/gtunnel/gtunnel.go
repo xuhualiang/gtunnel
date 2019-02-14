@@ -11,7 +11,7 @@ import (
 const (
 	DIAL_TIMEOUT = time.Second * 2
 	IO_TIMEOUT   = time.Second
-	METER_TIME   = time.Second * 2
+	METER_TIME   = time.Second * 10
 	BUF_SIZE     = 256 * 1024
 )
 
