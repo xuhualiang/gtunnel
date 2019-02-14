@@ -8,6 +8,8 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
+	"strconv"
 )
 
 var (
@@ -33,6 +35,8 @@ type Cfg struct {
 	Name    string
 	Accept  Endpoint
 	Connect Endpoint
+
+	TimeoutIdle time.Duration
 
 	Cert string
 	Key  string
@@ -63,6 +67,10 @@ func (cfg *Cfg) Solve(prot string, src string, dst string) error {
 	return nil
 }
 
+func (cfg *Cfg) Timeout(atime time.Time) bool {
+	return cfg.TimeoutIdle != 0 && time.Now().After(atime.Add(cfg.TimeoutIdle))
+}
+
 func assert(b bool, msg string) {
 	if !b {
 		panic(msg)
@@ -81,13 +89,13 @@ type Configuration struct {
 	Set []Cfg
 }
 
-func (configuration *Configuration) append(cfg Cfg, cert string, key string) {
+func (configuration *Configuration) append(cfg Cfg, shared Cfg) {
 	if cfg.Accept.SSL {
 		if cfg.Cert == "" {
-			cfg.Cert = cert
+			cfg.Cert = shared.Cert
 		}
 		if cfg.Key == "" {
-			cfg.Key = key
+			cfg.Key = shared.Key
 		}
 	}
 	if cfg.Valid() {
@@ -110,7 +118,7 @@ func (configuration *Configuration) LoadFile(file string) error {
 	assert(err == nil, fmt.Sprintf("failed to load %s %s", file, err))
 	defer cfgFile.Close()
 
-	cert, key, cur, inSection := "", "", Cfg{}, false
+	shared, cur, inSection := Cfg{}, Cfg{}, false
 
 	for scanner := bufio.NewScanner(cfgFile); scanner.Scan(); {
 		plainLine := strings.Trim(scanner.Text(), " ")
@@ -123,7 +131,7 @@ func (configuration *Configuration) LoadFile(file string) error {
 				return errors.New(fmt.Sprintf("bad format: %s", plainLine))
 			}
 			if inSection {
-				configuration.append(cur, cert, key)
+				configuration.append(cur, shared)
 			}
 
 			cur = Cfg{Name: strings.Trim(line, "[] ")}
@@ -154,15 +162,24 @@ func (configuration *Configuration) LoadFile(file string) error {
 							return err
 						}
 					}
+				case "timeout-idle":
+					if v, err := strconv.ParseUint(r[2], 10, 64); err != nil {
+						cur.TimeoutIdle = time.Duration(v)
+					}
+
 				default:
 					return errors.New(fmt.Sprintf("bad format: %s", plainLine))
 				}
 			} else {
 				switch r[1] {
 				case "cert":
-					cert = r[2]
+					shared.Cert = r[2]
 				case "key":
-					key = r[2]
+					shared.Key = r[2]
+				case "timeout-idle":
+					if v, err := strconv.ParseUint(r[2], 10, 64); err != nil {
+						shared.TimeoutIdle = time.Duration(v)
+					}
 				default:
 					return errors.New(fmt.Sprintf("bad format: %s", plainLine))
 				}
@@ -171,7 +188,7 @@ func (configuration *Configuration) LoadFile(file string) error {
 	}
 
 	if inSection {
-		configuration.append(cur, cert, key)
+		configuration.append(cur, shared)
 	}
 	return nil
 }

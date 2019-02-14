@@ -40,6 +40,10 @@ func mkWire(cfg *Cfg, src net.Conn, dst net.Conn) *Wire {
 	return wire
 }
 
+func (wire *Wire) Touch()  {
+	wire.atime = time.Now()
+}
+
 func (wire Wire) String() string {
 	return fmt.Sprintf("%s f: %s b: %s",
 		wire.cfg, wire.fm, wire.bm)

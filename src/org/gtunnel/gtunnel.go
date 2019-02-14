@@ -18,6 +18,10 @@ func deadline(d time.Duration) time.Time {
 	return time.Now().Add(d)
 }
 
+func timedout(t time.Time) bool {
+	return time.Now().After(t)
+}
+
 func isTimeout(err error) bool {
 	other, ok := err.(net.Error)
 	return ok && other.Timeout()
@@ -49,19 +53,19 @@ func dial(ep *Endpoint) (net.Conn, error) {
 	}
 }
 
-func readLoop(wire *Wire, rwb *rwbuf, from net.Conn, to net.Conn, m *meter) {
-	for !wire.closed {
+func readLoop(wire *Wire, cfg *Cfg, rwb *rwbuf, from net.Conn, to net.Conn, m *meter) {
+	for !wire.closed && cfg.Timeout(wire.atime) {
 		// 1 - read
 		b := rwb.ProducerBuffer()
 		if !wire.closed && len(b) > 0 {
 			from.SetReadDeadline(deadline(IO_TIMEOUT))
 			n, err := from.Read(b)
 			if err != nil && !isTimeout(err) {
-				fmt.Printf("read error - %s \n", err)
 				break
 			}
 			rwb.Produce(n)
 			m.rd += uint64(n)
+			wire.Touch()
 		}
 
 		// 2 - write
@@ -70,11 +74,11 @@ func readLoop(wire *Wire, rwb *rwbuf, from net.Conn, to net.Conn, m *meter) {
 			to.SetWriteDeadline(deadline(IO_TIMEOUT))
 			n, err := to.Write(b)
 			if err != nil && !isTimeout(err)  {
-				fmt.Printf("write error - %s \n", err)
 				break
 			}
 			rwb.Consume(n)
 			m.wr += uint64(n)
+			wire.Touch()
 		}
 	}
 
@@ -107,8 +111,10 @@ func listenLoop(cfg *Cfg) {
 			}
 
 			wire := mkWire(cfg, in, out)
-			go readLoop(wire, wire.fwb, wire.src, wire.dst, &wire.fm)
-			go readLoop(wire, wire.bwb, wire.dst, wire.src, &wire.bm)
+			go readLoop(wire, cfg, wire.fwb, wire.src, wire.dst, &wire.fm)
+			go readLoop(wire, cfg, wire.bwb, wire.dst, wire.src, &wire.bm)
+
+			fmt.Printf("new connection %s\n", wire)
 		}()
 	}
 }
