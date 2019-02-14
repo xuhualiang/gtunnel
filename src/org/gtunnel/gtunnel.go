@@ -11,15 +11,12 @@ import (
 const (
 	DIAL_TIMEOUT = time.Second * 2
 	IO_TIMEOUT   = time.Second
+	METER_TIME   = time.Second * 2
 	BUF_SIZE     = 256 * 1024
 )
 
 func deadline(d time.Duration) time.Time {
 	return time.Now().Add(d)
-}
-
-func timedout(t time.Time) bool {
-	return time.Now().After(t)
 }
 
 func isTimeout(err error) bool {
@@ -88,7 +85,7 @@ func readLoop(wire *Wire, cfg *Cfg, rwb *rwbuf, from net.Conn, to net.Conn, m *m
 	}
 }
 
-func listenLoop(cfg *Cfg) {
+func listenLoop(cfg *Cfg, live *Liveness) {
 	listenSock, err := listen(cfg)
 	if err != nil {
 		fmt.Printf("failed to listen on %s, error - %s\n", cfg, err)
@@ -111,8 +108,8 @@ func listenLoop(cfg *Cfg) {
 			}
 
 			wire := mkWire(cfg, in, out)
-			go readLoop(wire, cfg, wire.fwb, wire.src, wire.dst, &wire.fm)
-			go readLoop(wire, cfg, wire.bwb, wire.dst, wire.src, &wire.bm)
+			go readLoop(wire, cfg, wire.fwb, wire.src, wire.dst, wire.fm)
+			go readLoop(wire, cfg, wire.bwb, wire.dst, wire.src, wire.bm)
 
 			fmt.Printf("new connection %s\n", wire)
 		}()
@@ -126,14 +123,17 @@ func main() {
 	err := cfg.Load(flag.Args())
 	assert(err == nil, fmt.Sprintf("failed to load configuration %s", err))
 
+	live := NewLiveness()
 	for i, _ := range cfg.Set {
-		go listenLoop(&cfg.Set[i])
+		go listenLoop(&cfg.Set[i], live)
 	}
 
-	ticker := time.NewTicker(time.Second * 2)
-	for {
-		select {
-		case <-ticker.C:
-		}
+	time.Sleep(METER_TIME)
+	for ticker := time.NewTicker(METER_TIME); ; <-ticker.C  {
+		forward, backward := live.Measure()
+
+		fmt.Printf("\rfoward: %d bytes %f KB/s, backward: %d bytes %f KB/s",
+			forward, float64(forward) / 1024.0 / METER_TIME.Seconds(),
+				backward, float64(backward) / 1024.0 / METER_TIME.Seconds())
 	}
 }
