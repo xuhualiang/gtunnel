@@ -87,7 +87,7 @@ func readLoop(wire *Wire, cfg *Cfg, rwb *rwbuf, from net.Conn, to net.Conn, m *m
 	}
 
 	if !wire.closed {
-		fmt.Printf("close connection %s\n", wire)
+		fmt.Printf("D connection %s\n", wire)
 		wire.Close()
 	}
 }
@@ -119,7 +119,7 @@ func listenLoop(cfg *Cfg, live *Liveness) {
 			go readLoop(wire, cfg, wire.bwb, wire.dst, wire.src, wire.bm)
 
 			live.Add(wire)
-			fmt.Printf("new connection %s\n", wire)
+			fmt.Printf("U connection %s\n", wire)
 		}()
 	}
 }
