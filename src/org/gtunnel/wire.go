@@ -48,8 +48,7 @@ func (wire *Wire) Touch()  {
 }
 
 func (wire Wire) String() string {
-	return fmt.Sprintf("%s f: %s b: %s",
-		wire.cfg, wire.fm, wire.bm)
+	return wire.cfg.String()
 }
 
 type Liveness struct {
