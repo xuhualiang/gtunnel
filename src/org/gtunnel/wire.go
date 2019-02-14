@@ -3,7 +3,6 @@ package main
 import (
 	"net"
 	"time"
-	"fmt"
 )
 
 type Wire struct {
