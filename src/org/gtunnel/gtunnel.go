@@ -18,6 +18,11 @@ func deadline(d time.Duration) time.Time {
 	return time.Now().Add(d)
 }
 
+func isTimeout(err error) bool {
+	other, ok := err.(net.Error)
+	return ok && other.Timeout()
+}
+
 func listen(cfg *Cfg) (net.Listener, error) {
 	ep := &cfg.Accept
 
@@ -51,7 +56,7 @@ func readLoop(wire *Wire, rwb *rwbuf, from net.Conn, to net.Conn, m *meter) {
 		if !wire.closed && len(b) > 0 {
 			from.SetReadDeadline(deadline(IO_TIMEOUT))
 			n, err := from.Read(b)
-			if err != nil {
+			if err != nil && !isTimeout(err) {
 				fmt.Printf("read error - %s \n", err)
 				break
 			}
@@ -64,7 +69,7 @@ func readLoop(wire *Wire, rwb *rwbuf, from net.Conn, to net.Conn, m *meter) {
 		if !wire.closed && len(b) > 0 {
 			to.SetWriteDeadline(deadline(IO_TIMEOUT))
 			n, err := to.Write(b)
-			if err != nil {
+			if err != nil && !isTimeout(err)  {
 				fmt.Printf("write error - %s \n", err)
 				break
 			}
