@@ -52,31 +52,38 @@ func dial(ep *Endpoint) (net.Conn, error) {
 
 func readLoop(wire *Wire, cfg *Cfg, rwb *rwbuf, from net.Conn, to net.Conn, m *meter) {
 	for !wire.closed && !cfg.Timeout(wire.atime) {
+		rd, wr := 0, 0
+
 		// 1 - read
 		b := rwb.ProducerBuffer()
 		if !wire.closed && len(b) > 0 {
+			var err error = nil
+
 			from.SetReadDeadline(deadline(IO_TIMEOUT))
-			n, err := from.Read(b)
+			rd, err = from.Read(b)
 			if err != nil && !isTimeout(err) {
 				break
 			}
-			rwb.Produce(n)
-			m.rd += uint64(n)
+			rwb.Produce(rd)
 			wire.Touch()
 		}
 
 		// 2 - write
 		b = rwb.ConsumerBuffer()
 		if !wire.closed && len(b) > 0 {
+			var err error = nil
+
 			to.SetWriteDeadline(deadline(IO_TIMEOUT))
-			n, err := to.Write(b)
+			wr, err = to.Write(b)
 			if err != nil && !isTimeout(err)  {
 				break
 			}
-			rwb.Consume(n)
-			m.wr += uint64(n)
+			rwb.Consume(wr)
 			wire.Touch()
 		}
+
+		// 3. meter
+		m.Produce(rd, wr)
 	}
 
 	if !wire.closed {
@@ -111,6 +118,7 @@ func listenLoop(cfg *Cfg, live *Liveness) {
 			go readLoop(wire, cfg, wire.fwb, wire.src, wire.dst, wire.fm)
 			go readLoop(wire, cfg, wire.bwb, wire.dst, wire.src, wire.bm)
 
+			live.Add(wire)
 			fmt.Printf("new connection %s\n", wire)
 		}()
 	}
@@ -132,7 +140,7 @@ func main() {
 	for ticker := time.NewTicker(METER_TIME); ; <-ticker.C  {
 		forward, backward := live.Measure()
 
-		fmt.Printf("\rfoward: %d bytes %f KB/s, backward: %d bytes %f KB/s",
+		fmt.Printf("foward: %d bytes %f KB/s, backward: %d bytes %f KB/s\n",
 			forward, float64(forward) / 1024.0 / METER_TIME.Seconds(),
 				backward, float64(backward) / 1024.0 / METER_TIME.Seconds())
 	}

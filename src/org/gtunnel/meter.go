@@ -14,9 +14,9 @@ func NewMeter() *meter {
 	return m
 }
 
-func (m *meter) Produce(rd, wr uint64)  {
+func (m *meter) Produce(rd, wr int)  {
 	<- m.C
-		m.rd, m.wr = m.rd + rd, m.wr + wr
+		m.rd, m.wr = m.rd + uint64(rd), m.wr + uint64(wr)
 	m.C <- true
 }
 
