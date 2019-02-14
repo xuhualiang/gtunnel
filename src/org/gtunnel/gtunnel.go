@@ -135,7 +135,7 @@ func listenLoop(cfg *Cfg) {
 	for {
 		in, err := listenSock.Accept()
 		if err != nil {
-			fmt.Printf("failed to accept %s, error - %s\n", cfg.Accept.String(), err)
+			fmt.Printf("failed to accept %s, error - %s\n", cfg.Accept, err)
 			continue
 		}
 		go func() {

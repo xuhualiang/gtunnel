@@ -23,9 +23,9 @@ type Endpoint struct {
 
 func (ep Endpoint) String() string {
 	if ep.SSL {
-		return fmt.Sprintf("%s", ep.Addr.String())
+		return fmt.Sprintf("%s", ep.Addr)
 	} else {
-		return fmt.Sprintf("%s", ep.Addr.String())
+		return fmt.Sprintf("%s", ep.Addr)
 	}
 }
 
@@ -39,8 +39,7 @@ type Cfg struct {
 }
 
 func (cfg Cfg) String() string {
-	return fmt.Sprintf("%s %s/%s", cfg.Name,
-		cfg.Accept.String(), cfg.Connect.String())
+	return fmt.Sprintf("%s %s/%s", cfg.Name, cfg.Accept, cfg.Connect)
 }
 
 func (cfg *Cfg) Valid() bool {
