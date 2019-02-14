@@ -10,63 +10,12 @@ import (
 
 const (
 	DIAL_TIMEOUT = time.Second * 2
+	IO_TIMEOUT   = time.Second
 	BUF_SIZE     = 256 * 1024
 )
 
-type meter struct {
-	rd uint64
-	wr uint64
-}
-
-func (m meter) String() string {
-	return fmt.Sprintf("rd=%d wr=%d", m.rd, m.wr)
-}
-
-type Wire struct {
-	cfg *Cfg
-	src net.Conn
-	dst net.Conn
-
-	fwb *rwbuf
-	bwb *rwbuf
-
-	atime  time.Time
-	closed bool
-
-	fmeter meter
-	bmeter meter
-}
-
-func deadline(duration time.Duration) time.Time {
-	return time.Now().Add(duration)
-}
-
-func (wire *Wire) Close() {
-	wire.closed = true
-	wire.src.Close()
-	wire.dst.Close()
-}
-
-func mkWire(cfg *Cfg, src net.Conn, dst net.Conn) *Wire {
-	// don't block on write
-	src.SetWriteDeadline(time.Time{})
-	dst.SetWriteDeadline(time.Time{})
-
-	wire := &Wire{
-		cfg:   cfg,
-		src:   src,
-		dst:   dst,
-		fwb:   NewRWBuf(BUF_SIZE),
-		bwb:   NewRWBuf(BUF_SIZE),
-		atime: time.Now(),
-	}
-
-	return wire
-}
-
-func (wire Wire) String() string {
-	return fmt.Sprintf("%s f: %s b: %s",
-		wire.cfg, wire.fmeter, wire.bmeter)
+func deadline(d time.Duration) time.Time {
+	return time.Now().Add(d)
 }
 
 func listen(cfg *Cfg) (net.Listener, error) {
@@ -97,23 +46,29 @@ func dial(ep *Endpoint) (net.Conn, error) {
 
 func readLoop(wire *Wire, rwb *rwbuf, from net.Conn, to net.Conn, m *meter) {
 	for !wire.closed {
-		b := rwb.Writter()
+		// 1 - read
+		b := rwb.ProducerBuffer()
 		if !wire.closed && len(b) > 0 {
+			from.SetReadDeadline(deadline(IO_TIMEOUT))
 			n, err := from.Read(b)
 			if err != nil {
+				fmt.Printf("read error - %s \n", err)
 				break
 			}
-			rwb.Write(n)
+			rwb.Produce(n)
 			m.rd += uint64(n)
 		}
 
-		b = rwb.Reader()
+		// 2 - write
+		b = rwb.ConsumerBuffer()
 		if !wire.closed && len(b) > 0 {
+			to.SetWriteDeadline(deadline(IO_TIMEOUT))
 			n, err := to.Write(b)
 			if err != nil {
+				fmt.Printf("write error - %s \n", err)
 				break
 			}
-			rwb.Read(n)
+			rwb.Consume(n)
 			m.wr += uint64(n)
 		}
 	}
@@ -147,8 +102,8 @@ func listenLoop(cfg *Cfg) {
 			}
 
 			wire := mkWire(cfg, in, out)
-			go readLoop(wire, wire.fwb, wire.src, wire.dst, &wire.fmeter)
-			go readLoop(wire, wire.bwb, wire.dst, wire.src, &wire.bmeter)
+			go readLoop(wire, wire.fwb, wire.src, wire.dst, &wire.fm)
+			go readLoop(wire, wire.bwb, wire.dst, wire.src, &wire.bm)
 		}()
 	}
 }
@@ -164,7 +119,7 @@ func main() {
 		go listenLoop(&cfg.Set[i])
 	}
 
-	ticker := time.NewTicker(time.Second * 5)
+	ticker := time.NewTicker(time.Second * 2)
 	for {
 		select {
 		case <-ticker.C:

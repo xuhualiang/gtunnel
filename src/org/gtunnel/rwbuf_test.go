@@ -32,18 +32,18 @@ func Test0(t *testing.T)  {
 	randomize(src)
 
 	for i, j := 0, 0; i < SIZE || j < SIZE ; {
-		b := rwb.Writter()
+		b := rwb.ProducerBuffer()
 		n := minInt(minInt(len(b), SIZE - i), rand.Intn(CAP))
 		if n > 0 {
 			copy(b[:n], src[i:])
-			rwb.Write(n)
+			rwb.Produce(n)
 		}
 
-		b = rwb.Reader()
+		b = rwb.ConsumerBuffer()
 		m := minInt(minInt(len(b), SIZE - j), rand.Intn(CAP))
 		if m > 0 {
 			copy(dst[j:], b[:m])
-			rwb.Read(m)
+			rwb.Consume(m)
 		}
 
 		i += n

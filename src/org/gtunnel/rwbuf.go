@@ -27,15 +27,18 @@ func (rwb *rwbuf) invariant() {
 		fmt.Sprintf("bad buffer, [%d %d) cap=%d\n", rwb.lb, rwb.ub, rwb.cap))
 }
 
-func (rwb *rwbuf) Reader() []byte {
+func (rwb *rwbuf) ConsumerBuffer() []byte {
 	rwb.invariant()
 
 	lb := rwb.lb % rwb.cap
-	ub := roundUB(rwb.ub, rwb.cap)
+	ub := rwb.ub % rwb.cap
+	if rwb.lb / rwb.cap != rwb.ub / rwb.cap {
+		ub = rwb.cap
+	}
 	return rwb.data[lb: ub]
 }
 
-func (rwb *rwbuf) Read(n int) bool {
+func (rwb *rwbuf) Consume(n int) bool {
 	rwb.invariant()
 	rwb.lb += uint64(n)
 	rwb.invariant()
@@ -48,14 +51,14 @@ func (rwb *rwbuf) Read(n int) bool {
 	return rwb.lb < rwb.ub
 }
 
-func (rwb *rwbuf) Writter() []byte {
+func (rwb *rwbuf) ProducerBuffer() []byte {
 	lb := rwb.ub % rwb.cap
 	sz := roundUB(rwb.lb + rwb.cap, rwb.cap) - rwb.ub
 
 	return rwb.data[lb: (lb + sz)]
 }
 
-func (rwb *rwbuf) Write(n int) bool {
+func (rwb *rwbuf) Produce(n int) bool {
 	rwb.invariant()
 	rwb.ub += uint64(n)
 	rwb.invariant()
