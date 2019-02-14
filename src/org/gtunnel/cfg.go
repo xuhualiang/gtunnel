@@ -98,6 +98,9 @@ func (configuration *Configuration) append(cfg Cfg, shared Cfg) {
 			cfg.Key = shared.Key
 		}
 	}
+	if cfg.TimeoutIdle == 0 {
+		cfg.TimeoutIdle = shared.TimeoutIdle
+	}
 	if cfg.Valid() {
 		configuration.Set = append(configuration.Set, cfg)
 	}

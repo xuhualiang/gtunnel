@@ -54,7 +54,7 @@ func dial(ep *Endpoint) (net.Conn, error) {
 }
 
 func readLoop(wire *Wire, cfg *Cfg, rwb *rwbuf, from net.Conn, to net.Conn, m *meter) {
-	for !wire.closed && cfg.Timeout(wire.atime) {
+	for !wire.closed && !cfg.Timeout(wire.atime) {
 		// 1 - read
 		b := rwb.ProducerBuffer()
 		if !wire.closed && len(b) > 0 {
