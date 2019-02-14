@@ -21,7 +21,7 @@ type Endpoint struct {
 	Verify bool
 }
 
-func (ep *Endpoint) String() string {
+func (ep Endpoint) String() string {
 	if ep.SSL {
 		return fmt.Sprintf("%s", ep.Addr.String())
 	} else {
@@ -38,7 +38,7 @@ type Cfg struct {
 	Key  string
 }
 
-func (cfg *Cfg) String() string {
+func (cfg Cfg) String() string {
 	return fmt.Sprintf("%s %s/%s", cfg.Name,
 		cfg.Accept.String(), cfg.Connect.String())
 }

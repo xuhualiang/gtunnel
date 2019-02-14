@@ -10,12 +10,20 @@ import (
 
 const (
 	DIAL_TIMEOUT = time.Second * 2
-	IO_TIMEOUT   = time.Second * 1
-
-	BUF_SIZE  = 256 * 1024
+	BUF_SIZE     = 256 * 1024
 )
 
+type meter struct {
+	rd uint64
+	wr uint64
+}
+
+func (m meter) String() string {
+	return fmt.Sprintf("rd=%d wr=%d", m.rd, m.wr)
+}
+
 type Wire struct {
+	cfg *Cfg
 	src net.Conn
 	dst net.Conn
 
@@ -24,6 +32,9 @@ type Wire struct {
 
 	atime  time.Time
 	closed bool
+
+	fmeter meter
+	bmeter meter
 }
 
 func deadline(duration time.Duration) time.Time {
@@ -36,12 +47,13 @@ func (wire *Wire) Close() {
 	wire.dst.Close()
 }
 
-func mkWire(src net.Conn, dst net.Conn) *Wire {
+func mkWire(cfg *Cfg, src net.Conn, dst net.Conn) *Wire {
 	// don't block on write
 	src.SetWriteDeadline(time.Time{})
 	dst.SetWriteDeadline(time.Time{})
 
 	wire := &Wire{
+		cfg:   cfg,
 		src:   src,
 		dst:   dst,
 		fwb:   NewRWBuf(BUF_SIZE),
@@ -52,8 +64,9 @@ func mkWire(src net.Conn, dst net.Conn) *Wire {
 	return wire
 }
 
-func (wire *Wire) String() string {
-	return fmt.Sprintf("%s/%s", wire.src, wire.dst)
+func (wire Wire) String() string {
+	return fmt.Sprintf("%s f: %s b: %s",
+		wire.cfg, wire.fmeter, wire.bmeter)
 }
 
 func listen(cfg *Cfg) (net.Listener, error) {
@@ -82,30 +95,31 @@ func dial(ep *Endpoint) (net.Conn, error) {
 	}
 }
 
-func readLoop(wire *Wire, rwb *rwbuf, from net.Conn, to net.Conn) {
-	for {
+func readLoop(wire *Wire, rwb *rwbuf, from net.Conn, to net.Conn, m *meter) {
+	for !wire.closed {
 		b := rwb.Writter()
-		if len(b) > 0 {
+		if !wire.closed && len(b) > 0 {
 			n, err := from.Read(b)
 			if err != nil {
-				fmt.Printf("failed to read %s\n, close connection %s", err, wire)
 				break
 			}
-			rwb.Write(uint64(n))
+			rwb.Write(n)
+			m.rd += uint64(n)
 		}
 
 		b = rwb.Reader()
-		if len(b) > 0 {
+		if !wire.closed && len(b) > 0 {
 			n, err := to.Write(b)
 			if err != nil {
-				fmt.Printf("failed to write %s\n, close connection %s", err, wire)
 				break
 			}
-			rwb.Read(uint64(n))
+			rwb.Read(n)
+			m.wr += uint64(n)
 		}
 	}
 
 	if !wire.closed {
+		fmt.Printf("close connection %s\n", wire)
 		wire.Close()
 	}
 }
@@ -113,10 +127,10 @@ func readLoop(wire *Wire, rwb *rwbuf, from net.Conn, to net.Conn) {
 func listenLoop(cfg *Cfg) {
 	listenSock, err := listen(cfg)
 	if err != nil {
-		fmt.Printf("failed to listen on %s, error - %s\n", cfg.String(), err)
+		fmt.Printf("failed to listen on %s, error - %s\n", cfg, err)
 		return
 	}
-	fmt.Printf("listening on %s\n", cfg.String())
+	fmt.Printf("listening on %s\n", cfg)
 
 	for {
 		in, err := listenSock.Accept()
@@ -128,16 +142,14 @@ func listenLoop(cfg *Cfg) {
 			out, err := dial(&cfg.Connect)
 			if err != nil {
 				in.Close()
-				fmt.Printf("failed to wire %s, error - %s\n", cfg.String(), err)
+				fmt.Printf("failed to wire %s, error - %s\n", cfg, err)
 				return
 			}
 
-			wire := mkWire(in, out)
-			go readLoop(wire, wire.fwb, wire.src, wire.dst)
-			go readLoop(wire, wire.bwb, wire.dst, wire.src)
+			wire := mkWire(cfg, in, out)
+			go readLoop(wire, wire.fwb, wire.src, wire.dst, &wire.fmeter)
+			go readLoop(wire, wire.bwb, wire.dst, wire.src, &wire.bmeter)
 		}()
-
-		fmt.Printf("listening on %s\n", cfg.Accept.String())
 	}
 }
 
