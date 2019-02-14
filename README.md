@@ -1,6 +1,5 @@
 # gtunnel
-socket tunnel, a replacement of stunnel in Golang
+`gtunnel` translate data flow from socket to socket, SSL encap/decap can be applied. This is a Golang implementation in replace of `stunnel`. We don't have the pain of using openssl library, and we benefit from go-routine which is lightweight and scalable.
 
-## what is stunnel
-https://www.stunnel.org, stunnel is to translate regular socket and tls/ssl socket. It is in C/libopenssl which complicates the program and hard to handle the error cases. It is based on `select` model which makes it less efficient.
+`gtunnel` has to be very scalable, and measurement will be placed.
 
