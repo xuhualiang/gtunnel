@@ -150,8 +150,7 @@ func main() {
 	for ticker := time.NewTicker(METER_TIME); ; <-ticker.C  {
 		forward, backward := live.Measure()
 
-		fmt.Printf("foward: %d bytes %f KB/s, backward: %d bytes %f KB/s\n",
-			forward, float64(forward) / 1024.0 / METER_TIME.Seconds(),
-				backward, float64(backward) / 1024.0 / METER_TIME.Seconds())
+		fmt.Printf("foward: %d KB %f KB/s, backward: %d KB %f KB/s\n",
+			kb(forward), kbps(forward, METER_TIME), kb(backward), kbps(backward, METER_TIME))
 	}
 }

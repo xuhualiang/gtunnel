@@ -1,6 +1,17 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
+
+func kb(i uint64) float64 {
+	return float64(i) / 1024.0
+}
+
+func kbps(i uint64, d time.Duration) float64 {
+	return kb(i) / d.Seconds()
+}
 
 type meter struct {
 	rd uint64
