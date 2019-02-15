@@ -27,6 +27,10 @@ func (rwb *rwbuf) invariant() {
 		fmt.Sprintf("bad buffer, [%d %d) cap=%d\n", rwb.lb, rwb.ub, rwb.cap))
 }
 
+func (rwb *rwbuf) Consumable() bool {
+	return rwb.lb < rwb.ub
+}
+
 func (rwb *rwbuf) ConsumerBuffer() []byte {
 	rwb.invariant()
 
@@ -48,7 +52,11 @@ func (rwb *rwbuf) Consume(n int) bool {
 		rwb.ub = 0
 		rwb.lb = 0
 	}
-	return rwb.lb < rwb.ub
+	return rwb.Consumable()
+}
+
+func (rwb *rwbuf) Producible() bool {
+	return rwb.ub < rwb.lb + rwb.cap
 }
 
 func (rwb *rwbuf) ProducerBuffer() []byte {
@@ -62,5 +70,6 @@ func (rwb *rwbuf) Produce(n int) bool {
 	rwb.invariant()
 	rwb.ub += uint64(n)
 	rwb.invariant()
-	return rwb.ub < rwb.lb + rwb.cap
+
+	return rwb.Producible()
 }
