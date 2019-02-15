@@ -1,7 +1,7 @@
 # gtunnel
-`gtunnel` redirects data flow from socket to socket, SSL encap/decap can be applied. This is a Golang implementation in replace of `stunnel`. We don't have the pain of using openssl library, and we benefit from lightweight go-routine.
+`gtunnel` redirects data flow from socket to socket, SSL encap/decap can be applied in-between. This is a Golang implementation in replace of `stunnel`. We don't have the pain of using openssl library, we benefit from light-weighted go-routine and cross platform by nature.
 
-`gtunnel` has to be very scalable, and measurement will be placed.
+Unlike `stunnel`, `gtunnel` is simple enough, efficent and scalable. Detailed measurement will be placed. Contact `hualiang.xu@gmail.com` for more.
 
 ## socket to socket redirection
 ```
