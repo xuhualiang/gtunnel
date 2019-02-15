@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"time"
+	"os"
 )
 
 const (
@@ -138,6 +139,9 @@ func listenLoop(cfg *Cfg, live *Liveness) {
 
 func main() {
 	cfg := Configuration{}
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage of %s: [path-to-config-file]+\n", os.Args[0])
+	}
 	flag.Parse()
 
 	err := cfg.Load(flag.Args())
