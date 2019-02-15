@@ -6,14 +6,14 @@
 # socket to socket redirection
 ```
 [sock-to-sock]
-connect = `pp`/`localhost:1001`/`localhost:1002`
+connect = pp/localhost:1001/localhost:1002
 ```
 where `pp` stands for plain to plain socket
 
 # regular socket to SSL socket redirection
 ```
 [sock-to-ssl]
-connect = `ps`/`localhost:1001`/`localhost:1002`
+connect = ps/localhost:1001/localhost:1002
 cert = test/cert.pem
 key  = test/key.pem
 ```
@@ -22,7 +22,7 @@ where `ps` stands for plain socket to SSL socket. Typical usage of this is to sw
 # SSL socket to regular socket redirection
 ```
 [ssl-to-socket]
-connect = `sp`/`localhost:1001`/`localhost:1002`
+connect = sp/localhost:1001/localhost:1002
 cert = test/cert.pem
 key  = test/key.pem
 ```
