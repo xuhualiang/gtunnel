@@ -59,8 +59,9 @@ func readLoop(wire *Wire, cfg *Cfg, rwb *rwbuf, from net.Conn, to net.Conn, m *m
 		if !wire.closed && len(b) > 0 {
 			var err error = nil
 
+			// don't block if rwb is consumable
 			timeout := time.Time{}
-			if rwb.Consumable() {
+			if !rwb.Consumable() {
 				timeout = deadline(IO_TIMEOUT)
 			}
 			from.SetReadDeadline(timeout)
@@ -78,8 +79,9 @@ func readLoop(wire *Wire, cfg *Cfg, rwb *rwbuf, from net.Conn, to net.Conn, m *m
 		if !wire.closed && len(b) > 0 {
 			var err error = nil
 
+			// don't block if rwb is producible
 			timeout := time.Time{}
-			if rwb.Producible() {
+			if !rwb.Producible() {
 				timeout = deadline(IO_TIMEOUT)
 			}
 			to.SetWriteDeadline(timeout)
