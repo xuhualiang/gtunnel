@@ -3,14 +3,14 @@
 
 `gtunnel` has to be very scalable, and measurement will be placed.
 
-# socket to socket redirection
+## socket to socket redirection
 ```
 [sock-to-sock]
 connect = pp/localhost:1001/localhost:1002
 ```
 where `pp` stands for plain to plain socket
 
-# regular socket to SSL socket redirection
+## regular socket to SSL socket redirection
 ```
 [sock-to-ssl]
 connect = ps/localhost:1001/localhost:1002
@@ -19,7 +19,7 @@ key  = test/key.pem
 ```
 where `ps` stands for plain socket to SSL socket. Typical usage of this is to switch your old app client into SSL with minimum change.
 
-# SSL socket to regular socket redirection
+## SSL socket to regular socket redirection
 ```
 [ssl-to-socket]
 connect = sp/localhost:1001/localhost:1002
@@ -28,7 +28,7 @@ key  = test/key.pem
 ```
 where `sp` stands for plain socket to SSL socket. Typical usage of this is to switch your old app server into SSL with minimum change.
 
-# generate a testing cert/key pair with openssl
+## generate a testing cert/key pair with openssl
 ```
 openssl req -newkey rsa:2048 -nodes
 	-keyout key.pem
