@@ -59,7 +59,11 @@ func readLoop(wire *Wire, cfg *Cfg, rwb *rwbuf, from net.Conn, to net.Conn, m *m
 		if !wire.closed && len(b) > 0 {
 			var err error = nil
 
-			from.SetReadDeadline(deadline(IO_TIMEOUT))
+			if len(rwb.ConsumerBuffer()) == 0 {
+				from.SetReadDeadline(deadline(IO_TIMEOUT))
+			} else {
+				from.SetReadDeadline(time.Time{})
+			}
 			rd, err = from.Read(b)
 			if err != nil && !isTimeout(err) {
 				break
@@ -73,7 +77,11 @@ func readLoop(wire *Wire, cfg *Cfg, rwb *rwbuf, from net.Conn, to net.Conn, m *m
 		if !wire.closed && len(b) > 0 {
 			var err error = nil
 
-			to.SetWriteDeadline(deadline(IO_TIMEOUT))
+			if len(rwb.ProducerBuffer()) == 0 {
+				to.SetWriteDeadline(deadline(IO_TIMEOUT))
+			} else {
+				to.SetWriteDeadline(time.Time{})
+			}
 			wr, err = to.Write(b)
 			if err != nil && !isTimeout(err)  {
 				break
