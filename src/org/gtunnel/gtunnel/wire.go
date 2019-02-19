@@ -3,6 +3,7 @@ package main
 import (
 	"net"
 	"time"
+	"org/gtunnel/api"
 )
 
 type Wire struct {
@@ -10,8 +11,8 @@ type Wire struct {
 	src net.Conn
 	dst net.Conn
 
-	fwb *rwbuf
-	bwb *rwbuf
+	fwb *api.RwBuf
+	bwb *api.RwBuf
 
 	atime  time.Time
 	closed bool
@@ -28,15 +29,15 @@ func (wire *Wire) Close() {
 
 func mkWire(cfg *Cfg, src net.Conn, dst net.Conn) *Wire {
 	wire := &Wire{
-		cfg:   cfg,
-		src:   src,
-		dst:   dst,
-		fwb:   NewRWBuf(BUF_SIZE),
-		bwb:   NewRWBuf(BUF_SIZE),
-		atime: time.Now(),
+		cfg:    cfg,
+		src:    src,
+		dst:    dst,
+		fwb:    api.MkRWBuf(BUF_SIZE),
+		bwb:    api.MkRWBuf(BUF_SIZE),
+		atime:  time.Now(),
 		closed: false,
-		fm:    NewMeter(),
-		bm:    NewMeter(),
+		fm:     NewMeter(),
+		bm:     NewMeter(),
 	}
 
 	return wire

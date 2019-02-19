@@ -1,4 +1,4 @@
-package main
+package api
 
 import (
 	"testing"
@@ -27,7 +27,7 @@ func Test0(t *testing.T)  {
 	rand.Seed(time.Now().Unix())
 	src := make([]byte, SIZE)
 	dst := make([]byte, SIZE)
-	rwb := NewRWBuf(CAP)
+	rwb := MkRWBuf(CAP)
 
 	randomize(src)
 

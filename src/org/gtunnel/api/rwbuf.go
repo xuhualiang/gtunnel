@@ -1,16 +1,18 @@
-package main
+package api
 
-import "fmt"
+import (
+	"fmt"
+)
 
-type rwbuf struct {
+type RwBuf struct {
 	data []byte
 	cap  uint64
 	lb   uint64
 	ub   uint64
 }
 
-func NewRWBuf(cap uint64) *rwbuf {
-	return &rwbuf{
+func MkRWBuf(cap uint64) *RwBuf {
+	return &RwBuf{
 		data: make([]byte, cap),
 		cap:  cap,
 		lb:   0,
@@ -22,16 +24,16 @@ func roundUB(p uint64, cap uint64) uint64 {
 	return p - p % cap
 }
 
-func (rwb *rwbuf) invariant() {
-	assert(rwb.lb <= rwb.ub && rwb.ub <= rwb.lb + rwb.cap,
+func (rwb *RwBuf) invariant() {
+	Assert(rwb.lb <= rwb.ub && rwb.ub <= rwb.lb + rwb.cap,
 		fmt.Sprintf("bad buffer, [%d %d) cap=%d\n", rwb.lb, rwb.ub, rwb.cap))
 }
 
-func (rwb *rwbuf) Consumable() bool {
+func (rwb *RwBuf) Consumable() bool {
 	return rwb.lb < rwb.ub
 }
 
-func (rwb *rwbuf) ConsumerBuffer() []byte {
+func (rwb *RwBuf) ConsumerBuffer() []byte {
 	rwb.invariant()
 
 	lb := rwb.lb % rwb.cap
@@ -42,8 +44,7 @@ func (rwb *rwbuf) ConsumerBuffer() []byte {
 	return rwb.data[lb: ub]
 }
 
-func (rwb *rwbuf) Consume(n int) bool {
-	rwb.invariant()
+func (rwb *RwBuf) Consume(n int) bool {
 	rwb.lb += uint64(n)
 	rwb.invariant()
 
@@ -55,19 +56,18 @@ func (rwb *rwbuf) Consume(n int) bool {
 	return rwb.Consumable()
 }
 
-func (rwb *rwbuf) Producible() bool {
+func (rwb *RwBuf) Producible() bool {
 	return rwb.ub < rwb.lb + rwb.cap
 }
 
-func (rwb *rwbuf) ProducerBuffer() []byte {
+func (rwb *RwBuf) ProducerBuffer() []byte {
 	lb := rwb.ub % rwb.cap
 	sz := roundUB(rwb.lb + rwb.cap, rwb.cap) - rwb.ub
 
 	return rwb.data[lb: (lb + sz)]
 }
 
-func (rwb *rwbuf) Produce(n int) bool {
-	rwb.invariant()
+func (rwb *RwBuf) Produce(n int) bool {
 	rwb.ub += uint64(n)
 	rwb.invariant()
 
