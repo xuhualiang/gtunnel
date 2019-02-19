@@ -113,7 +113,7 @@ func listenLoop(cfg *Cfg, live *Liveness) {
 			go redirectLoop(wire, cfg, wire.bwb, wire.dst, wire.src, wire.bm)
 
 			live.Add(wire)
-			fmt.Printf("U connection %s\n", wire)
+			fmt.Printf("U connection %s (%s)\n", wire, ep)
 		}()
 	}
 }
