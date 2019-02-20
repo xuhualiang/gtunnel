@@ -11,7 +11,7 @@ Unlike `stunnel`, `gtunnel` is simple enough, efficent and scalable. Detailed me
 [sock-to-sock]
 connect = pp/localhost:1001/localhost:1002
 ```
-where `pp` stands for plain to plain socket
+where `pp` stands for plain to plain socket.
 
 ## regular socket to SSL socket redirection
 ```
@@ -20,7 +20,7 @@ connect = ps/localhost:1001/localhost:1002
 cert = test/cert.pem
 key  = test/key.pem
 ```
-where `ps` stands for plain socket to SSL socket. Typical usage of this is to switch your old app client into SSL with minimum change.
+where `ps` stands for plain to SSL socket. Use this to switch your client into SSL with minimum change.
 
 ## SSL socket to regular socket redirection
 ```
@@ -29,9 +29,9 @@ connect = sp/localhost:1001/localhost:1002
 cert = test/cert.pem
 key  = test/key.pem
 ```
-where `sp` stands for plain socket to SSL socket. Typical usage of this is to switch your old app server into SSL with minimum change.
+where `sp` stands for SSL to plain socket. Use this to switch your server into SSL with minimum change.
 
-## load balance
+## Load Balancer
 ```
 [my-load-balancer]
 connect = sp/localhost:1001/localhost:20001,localhost:20002
@@ -43,6 +43,6 @@ key  = test/key.pem
 ```
 openssl req -newkey rsa:2048 -nodes
 	-keyout key.pem
-	-x509 -days 3650 -out cert.pem
-	-subj /C=US/ST=Massachusetts/L=Cambridge/O=Organization/OU=OrganizationUnit/CN=CommonName
+	-x509 -days 365 -out cert.pem
+	-subj /C=US/ST=Massachusetts/L=Dover/O=Organization/OU=OrganizationUnit/CN=CommonName
 ```
