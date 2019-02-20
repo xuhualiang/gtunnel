@@ -1,7 +1,10 @@
 # gtunnel
-`gtunnel` redirects data flow from socket to socket, SSL encap/decap can be applied in-between. This is a Golang implementation in replace of `stunnel`. We don't have the pain of using openssl library, we benefit from light-weighted go-routine and cross platform by nature.
+`gtunnel` is a proxy that translates existing client/server into SSL. It is a `golang` implementation that replaces `stunnel`. We benefit from efficient `goroutine`. we cross plantforms with a few hundred lines of go code.
+
+As of Feb 19, 2019, `gtunnel` can work as a `load balancer` with simple `round roubin` rotation method.
 
 Unlike `stunnel`, `gtunnel` is simple enough, efficent and scalable. Detailed measurement will be placed. Contact `hualiang.xu@gmail.com` for more.
+
 
 ## socket to socket redirection
 ```
@@ -27,6 +30,12 @@ cert = test/cert.pem
 key  = test/key.pem
 ```
 where `sp` stands for plain socket to SSL socket. Typical usage of this is to switch your old app server into SSL with minimum change.
+
+## load balance
+```
+[my-load-balancer]
+connect = sp/localhost:1001/localhost:20001,localhost:20002
+```
 
 ## generate a testing cert/key pair with openssl
 ```
