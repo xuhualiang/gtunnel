@@ -73,8 +73,6 @@ func redirectLoop(wire *Wire, cfg *Cfg, rwb *api.RwBuf, from net.Conn, to net.Co
 }
 
 func listenLoop(cfg *Cfg, live *Liveness) {
-	var lb LoadBalancer
-
 	listenSock, err := api.Listen(cfg.Accept, cfg.Get("cert"), cfg.Get("key"))
 	if err != nil {
 		fmt.Printf("failed to listen on %s, error - %s\n", cfg, err)
@@ -82,11 +80,7 @@ func listenLoop(cfg *Cfg, live *Liveness) {
 	}
 	fmt.Printf("listening on %s\n", cfg)
 
-	if cfg.Connect.Len() == 1 {
-		lb = mkEasyLoadBalancer(cfg.Connect.EP[0])
-	} else {
-		lb = mkRandomLoadBalancer(cfg.Connect)
-	}
+	lb := MkLoadBalancer(cfg.Connect)
 
 	for {
 		in, err := listenSock.Accept()

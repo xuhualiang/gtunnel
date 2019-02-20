@@ -12,17 +12,17 @@ type LoadBalancer interface {
 }
 
 // not a load balancer
-type EasyLoadBalancer struct {
+type NotALoadBalancer struct {
 	ep *api.Endpoint
 }
 
-func mkEasyLoadBalancer(ep *api.Endpoint) LoadBalancer {
-	return &EasyLoadBalancer{
+func mkNotALoadBalancer(ep *api.Endpoint) LoadBalancer {
+	return &NotALoadBalancer{
 		ep: ep,
 	}
 }
 
-func (lb *EasyLoadBalancer) Pick(_ time.Duration) *api.Endpoint {
+func (lb *NotALoadBalancer) Pick(_ time.Duration) *api.Endpoint {
 	return lb.ep
 }
 
@@ -51,7 +51,7 @@ func (lb *RoundRobinBalancer) monitor(){
 	api.Assert(false, "unreachable")
 }
 
-func mkRandomLoadBalancer(epl *api.EndpointList) LoadBalancer {
+func mkRoundRobinLoadBalancer(epl *api.EndpointList) LoadBalancer {
 	lb := &RoundRobinBalancer{
 		epl: epl.EP,
 		c:   make(chan *api.Endpoint, len(epl.EP)),
@@ -70,5 +70,13 @@ func (lb *RoundRobinBalancer) Pick(d time.Duration) *api.Endpoint {
 	case ep := <- lb.c:
 		lb.c <- ep
 		return ep
+	}
+}
+
+func MkLoadBalancer(epl *api.EndpointList) LoadBalancer {
+	if len(epl.EP) == 1 {
+		return mkNotALoadBalancer(epl.EP[0])
+	} else {
+		return mkRoundRobinLoadBalancer(epl)
 	}
 }
