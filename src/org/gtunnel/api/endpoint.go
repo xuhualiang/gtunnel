@@ -22,6 +22,10 @@ func Deadline(d time.Duration) time.Time {
 	return time.Now().Add(d)
 }
 
+func Duration(t time.Time) time.Duration {
+	return time.Now().Sub(t)
+}
+
 func Due(deadline time.Time) bool {
 	return time.Now().After(deadline)
 }

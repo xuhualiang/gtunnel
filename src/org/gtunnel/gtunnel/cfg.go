@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	lineExp   = regexp.MustCompile(`([^ ]*)[ ]+=[ ]+([^ ]+)`)
+	lineExp   = regexp.MustCompile(`([^ ]*)[ ]*=[ ]*([^ ]+)`)
 )
 
 type Cfg struct {
@@ -33,14 +33,6 @@ func mkCfg(name string) *Cfg {
 
 func (cfg Cfg) String() string {
 	return fmt.Sprintf("%s %s", cfg.Name, cfg.KV["connect"])
-}
-
-func (cfg *Cfg) Get(k string) string {
-	v, ok := cfg.KV[k]
-	if !ok {
-		return ""
-	}
-	return v
 }
 
 func (cfg *Cfg) Valid() bool {
@@ -67,18 +59,19 @@ func (cfg *Cfg) SkipVerify() bool {
 	return false
 }
 
+func (cfg *Cfg) Cert() string {
+	return cfg.KV["cert"]
+}
+
+func (cfg *Cfg) Key() string {
+	return cfg.KV["key"]
+}
+
 func (cfg *Cfg) AddIfMiss(other *Cfg) {
-	if cfg.KV["cert"] == "" {
-		cfg.KV["cert"] = other.KV["cert"]
-	}
-	if cfg.KV["key"] == "" {
-		cfg.KV["key"] = other.KV["key"]
-	}
-	if cfg.KV["timeout-idle"] == "" {
-		cfg.KV["timeout-idle"] = other.KV["timeout-idle"]
-	}
-	if cfg.KV["skip-verify"] == "" {
-		cfg.KV["skip-verify"] = other.KV["skip-verify"]
+	for k, v := range other.KV {
+		if _, ok := cfg.KV[k]; !ok {
+			cfg.KV[k] = v
+		}
 	}
 }
 

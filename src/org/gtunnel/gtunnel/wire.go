@@ -71,27 +71,27 @@ func (live *Liveness) Add(wire *Wire)  {
 	live.C <- true
 }
 
-func (live *Liveness) Measure() (forward, backward uint64) {
+func (live *Liveness) Measure() (forward, backward, count uint64) {
 	// remove dead wires
+	W := make([]*Wire, 0)
+
 	<-live.C
-		lastGood := -1
-		for i := 0; i < len(live.W); i++ {
-			if !live.W[i].closed {
-				lastGood += 1
-				live.W[lastGood], live.W[i] = live.W[i], live.W[lastGood]
+		for _, one := range live.W {
+			if !one.closed {
+				W = append(W, one)
 			}
 		}
 
-		live.W = live.W[0:lastGood + 1]
-		W := live.W[0: len(live.W)]
+		live.W = W
+		N := len(W)
 	live.C <- true
 
-	for _, w := range W {
-		_, wr0 := w.fm.Consume()
+	for _, one := range W {
+		_, wr0 := one.fm.Consume()
 		forward += wr0
 
-		_, wr1 := w.bm.Consume()
+		_, wr1 := one.bm.Consume()
 		backward += wr1
 	}
-	return
+	return forward, backward, uint64(N)
 }

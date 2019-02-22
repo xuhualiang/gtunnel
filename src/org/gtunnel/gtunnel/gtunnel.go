@@ -19,12 +19,11 @@ const (
 func redirectLoop(wire *Wire, cfg *Cfg, rwb *api.RwBuf, from net.Conn, to net.Conn, m *meter) {
 	for !wire.closed && !cfg.Timeout(wire.atime) {
 		rd, wr := 0, 0
+		touch := false
 
 		// 1 - read
 		b := rwb.ProducerBuffer()
 		if !wire.closed && len(b) > 0 {
-			var err error = nil
-
 			// don't block if rwb is consumable
 			deadline := time.Time{}
 			if !rwb.Consumable() {
@@ -32,20 +31,18 @@ func redirectLoop(wire *Wire, cfg *Cfg, rwb *api.RwBuf, from net.Conn, to net.Co
 			}
 			from.SetReadDeadline(deadline)
 
-			rd, err = from.Read(b)
+			rd, err := from.Read(b)
 			if err != nil && !api.IsTimeoutError(err) {
 				break
 			} else if rd > 0 {
 				rwb.Produce(rd)
-				wire.Touch()
+				touch = true
 			}
 		}
 
 		// 2 - write
 		b = rwb.ConsumerBuffer()
 		if !wire.closed && len(b) > 0 {
-			var err error = nil
-
 			// don't block if rwb is producible
 			deadline := time.Time{}
 			if !rwb.Producible() {
@@ -53,13 +50,17 @@ func redirectLoop(wire *Wire, cfg *Cfg, rwb *api.RwBuf, from net.Conn, to net.Co
 			}
 			to.SetWriteDeadline(deadline)
 
-			wr, err = to.Write(b)
+			wr, err := to.Write(b)
 			if err != nil && !api.IsTimeoutError(err)  {
 				break
 			} else if wr > 0 {
 				rwb.Consume(wr)
-				wire.Touch()
+				touch = true
 			}
+		}
+
+		if touch {
+			wire.Touch()
 		}
 
 		// 3. meter
@@ -73,7 +74,7 @@ func redirectLoop(wire *Wire, cfg *Cfg, rwb *api.RwBuf, from net.Conn, to net.Co
 }
 
 func listenLoop(cfg *Cfg, live *Liveness) {
-	listenSock, err := api.Listen(cfg.Accept, cfg.Get("cert"), cfg.Get("key"))
+	listenSock, err := api.Listen(cfg.Accept, cfg.Cert(), cfg.Key())
 	if err != nil {
 		fmt.Printf("failed to listen on %s, error - %s\n", cfg, err)
 		return
@@ -91,6 +92,7 @@ func listenLoop(cfg *Cfg, live *Liveness) {
 		go func() {
 			ep := lb.Pick(api.DIAL_ALLOWANCE)
 			if ep == nil {
+				in.Close()
 				fmt.Printf("failed to discover endpoint")
 				return
 			}
@@ -130,10 +132,10 @@ func main() {
 
 	time.Sleep(METER_PERIOD)
 	for ticker := time.NewTicker(METER_PERIOD); ; <-ticker.C  {
-		forward, backward := live.Measure()
+		forward, backward, wires := live.Measure()
 
-		fmt.Printf("foward: %.2f KB %.2f KB/s, backward: %.2f KB %.2f KB/s\n",
-			api.KB(forward), api.KBPS(forward, METER_PERIOD),
+		fmt.Printf("%d wires, foward: %.2f KB %.2f KB/s, backward: %.2f KB %.2f KB/s\n",
+			wires, api.KB(forward), api.KBPS(forward, METER_PERIOD),
 				api.KB(backward), api.KBPS(backward, METER_PERIOD))
 	}
 }

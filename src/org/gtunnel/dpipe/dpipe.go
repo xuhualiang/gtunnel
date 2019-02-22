@@ -22,15 +22,16 @@ func parseInput() (string, string, uint64, uint64) {
 	return *in, *out, *blockSz, *contentSz
 }
 
-func sock2file(inConn net.Conn, outFile *os.File, blockSz, contentSz uint64) time.Duration {
+func sock2file(inConn net.Conn, outFile *os.File, blockSz, _ uint64) time.Duration {
 	rwb := api.MkRWBuf(blockSz)
 	start := time.Now()
 
-	for i := uint64(0); i < contentSz; {
+	for i := uint64(0); ; {
 		if rwb.Producible() {
 			n, err := inConn.Read(rwb.ProducerBuffer())
-			api.Assert(err == nil,
-				fmt.Sprintf("failed to read socket %s", err))
+			if err != nil {
+				break
+			}
 			rwb.Produce(n)
 		}
 
@@ -59,7 +60,6 @@ func file2sock(inFile *os.File, outConn net.Conn, blockSz, contentSz uint64) tim
 		}
 
 		if rwb.Consumable() {
-			fmt.Printf("%s\n", rwb.ConsumerBuffer())
 			n, err := outConn.Write(rwb.ConsumerBuffer())
 			api.Assert(err == nil,
 				fmt.Sprintf("failed to write socket %s", err))
@@ -67,7 +67,7 @@ func file2sock(inFile *os.File, outConn net.Conn, blockSz, contentSz uint64) tim
 			i += uint64(n)
 		}
 	}
-	return time.Now().Sub(start)
+	return api.Duration(start)
 }
 
 func main() {
@@ -75,6 +75,9 @@ func main() {
 	d := time.Duration(0)
 
 	if epExpr.MatchString(in) {
+		if epExpr.MatchString(out) {
+			api.Assert(false, "unreachable`")
+		}
 		inEp, err := api.MkEndpoint(in, false /*=!ssl*/)
 		api.Assert(err == nil,
 			fmt.Sprintf("failed to solve endpoint %s", in))
@@ -83,20 +86,21 @@ func main() {
 		api.Assert(err == nil,
 			fmt.Sprintf("failed to accept connection %s", err))
 
-		inConn, err := listenSock.Accept()
-		api.Assert(err == nil,
-			fmt.Sprintf("failed to accept connection %s %s", inEp, err))
-
-		if epExpr.MatchString(out) {
-			api.Assert(false, "unreachable`")
-		} else {
-			outFile, err := os.OpenFile(out,
-				os.O_APPEND | os.O_CREATE | os.O_RDWR, 0755)
+		for {
+			inConn, err := listenSock.Accept()
 			api.Assert(err == nil,
-				fmt.Sprintf("failed to open %s %s", out, err))
+				fmt.Sprintf("failed to accept connection %s %s", inEp, err))
 
-			defer outFile.Close()
-			d = sock2file(inConn, outFile, blockSz, contentSz)
+			go func() {
+				outFile, err := os.OpenFile(out,
+					os.O_APPEND|os.O_CREATE|os.O_RDWR, 0755)
+				api.Assert(err == nil,
+					fmt.Sprintf("failed to open %s %s", out, err))
+
+				defer outFile.Close()
+				defer inConn.Close()
+				d = sock2file(inConn, outFile, blockSz, contentSz)
+			}()
 		}
 	} else {
 		inFile, err := os.Open(in)
