@@ -24,6 +24,8 @@ func redirectLoop(wire *Wire, cfg *Cfg, rwb *api.RwBuf, from net.Conn, to net.Co
 		// 1 - read
 		b := rwb.ProducerBuffer()
 		if !wire.closed && len(b) > 0 {
+			var err error
+
 			// don't block if rwb is consumable
 			deadline := time.Time{}
 			if !rwb.Consumable() {
@@ -31,7 +33,7 @@ func redirectLoop(wire *Wire, cfg *Cfg, rwb *api.RwBuf, from net.Conn, to net.Co
 			}
 			from.SetReadDeadline(deadline)
 
-			rd, err := from.Read(b)
+			rd, err = from.Read(b)
 			if err != nil && !api.IsTimeoutError(err) {
 				break
 			} else if rd > 0 {
@@ -43,6 +45,8 @@ func redirectLoop(wire *Wire, cfg *Cfg, rwb *api.RwBuf, from net.Conn, to net.Co
 		// 2 - write
 		b = rwb.ConsumerBuffer()
 		if !wire.closed && len(b) > 0 {
+			var err error
+
 			// don't block if rwb is producible
 			deadline := time.Time{}
 			if !rwb.Producible() {
@@ -50,7 +54,7 @@ func redirectLoop(wire *Wire, cfg *Cfg, rwb *api.RwBuf, from net.Conn, to net.Co
 			}
 			to.SetWriteDeadline(deadline)
 
-			wr, err := to.Write(b)
+			wr, err = to.Write(b)
 			if err != nil && !api.IsTimeoutError(err)  {
 				break
 			} else if wr > 0 {

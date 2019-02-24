@@ -75,23 +75,27 @@ func (live *Liveness) Measure() (forward, backward, count uint64) {
 	// remove dead wires
 	W := make([]*Wire, 0)
 
+	// during measurement, no new wire can made
 	<-live.C
-		for _, one := range live.W {
-			if !one.closed {
+		N := len(live.W)
+
+		for i, one := range live.W {
+			_, wr0 := one.fm.Consume()
+			forward += wr0
+
+			_, wr1 := one.bm.Consume()
+			backward += wr1
+
+			if one.closed {
+				// I don't understand how GC works, setting nil reference anyway
+				live.W[i] = nil
+			} else {
 				W = append(W, one)
 			}
 		}
 
 		live.W = W
-		N := len(W)
 	live.C <- true
 
-	for _, one := range W {
-		_, wr0 := one.fm.Consume()
-		forward += wr0
-
-		_, wr1 := one.bm.Consume()
-		backward += wr1
-	}
 	return forward, backward, uint64(N)
 }

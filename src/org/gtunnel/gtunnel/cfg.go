@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	lineExp   = regexp.MustCompile(`([^ ]*)[ ]*=[ ]*([^ ]+)`)
+	lineExp   = regexp.MustCompile(`([^ ]*)[ \t]*=[ \t]*([^ ]+)`)
 )
 
 type Cfg struct {
