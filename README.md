@@ -42,7 +42,7 @@ key  = test/key.pem
 ## generate a testing cert/key pair with openssl
 ```
 openssl req -newkey rsa:2048 -nodes \
-	-keyout key.pem                 \
-	-x509 -days 365 -out cert.pem   \
-	-subj /C=US/ST=Massachusetts/L=Dover/O=Organization/OU=OrganizationUnit/CN=CommonName
+    -keyout key.pem                 \
+    -x509 -days 365 -out cert.pem   \
+    -subj /C=US/ST=Massachusetts/L=Dover/O=Organization/OU=OrganizationUnit/CN=CommonName
 ```
