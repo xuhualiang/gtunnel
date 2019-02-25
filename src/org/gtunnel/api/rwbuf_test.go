@@ -22,7 +22,7 @@ func randomize(b []byte)  {
 
 func Test0(t *testing.T)  {
 	const CAP = 64
-	const SIZE = 1024 * 64
+	const SIZE = 1024 * 1024 * 64
 
 	rand.Seed(time.Now().Unix())
 	src := make([]byte, SIZE)
@@ -50,5 +50,5 @@ func Test0(t *testing.T)  {
 		j += m
 	}
 
-	assert(bytes.Equal(src, dst), "")
+	Assert(bytes.Equal(src, dst), "")
 }

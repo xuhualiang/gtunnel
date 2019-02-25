@@ -9,4 +9,4 @@ clean:
 	@rm -rfv ./bin ./pkg
 
 test:
-	@go test org/gtunnel
+	@go test org/gtunnel/api
