@@ -24,12 +24,12 @@ where `ps` stands for plain to SSL socket. Use this to switch your client into S
 
 ## SSL socket to regular socket redirection
 ```
-[ssl-to-socket]
-connect = sp/localhost:1001/localhost:1002
+[https-to-http]
+connect = sp/localhost:443/localhost:80
 cert = test/cert.pem
 key  = test/key.pem
 ```
-where `sp` stands for SSL to plain socket. Use this to switch your server into SSL with minimum change.
+where `sp` stands for SSL to plain socket. Use this to convert your web server into https.
 
 ## Load Balancer
 ```
@@ -41,8 +41,8 @@ key  = test/key.pem
 
 ## generate a testing cert/key pair with openssl
 ```
-openssl req -newkey rsa:2048 -nodes
-	-keyout key.pem
-	-x509 -days 365 -out cert.pem
+openssl req -newkey rsa:2048 -nodes \
+	-keyout key.pem                 \
+	-x509 -days 365 -out cert.pem   \
 	-subj /C=US/ST=Massachusetts/L=Dover/O=Organization/OU=OrganizationUnit/CN=CommonName
 ```
