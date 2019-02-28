@@ -136,10 +136,10 @@ func main() {
 
 	time.Sleep(METER_PERIOD)
 	for ticker := time.NewTicker(METER_PERIOD); ; <-ticker.C  {
-		forward, backward, wires := live.Measure()
+		forward, backward, N := live.Measure()
 
 		fmt.Printf("%d wires, foward: %.2f KB %.2f KB/s, backward: %.2f KB %.2f KB/s\n",
-			wires, api.KB(forward), api.KBPS(forward, METER_PERIOD),
+			N, api.KB(forward), api.KBPS(forward, METER_PERIOD),
 				api.KB(backward), api.KBPS(backward, METER_PERIOD))
 	}
 }

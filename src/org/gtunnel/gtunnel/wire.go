@@ -61,41 +61,44 @@ func NewLiveness() *Liveness {
 		W: make([]*Wire, 0),
 		C: make(chan bool, 1),
 	}
-	live.C <- true
 	return live
 }
 
 func (live *Liveness) Add(wire *Wire)  {
-	<-live.C
-		live.W = append(live.W, wire)
 	live.C <- true
+	live.W = append(live.W, wire)
+	<- live.C
 }
 
-func (live *Liveness) Measure() (forward, backward, count uint64) {
-	// remove dead wires
-	W := make([]*Wire, 0)
+func (live *Liveness) Measure() (uint64, uint64, int) {
+	c := make(chan *Wire)
 
-	// during measurement, no new wire can made
-	<-live.C
-		N := len(live.W)
-
+	go func() {
+		live.C <- true
+		lastGood := -1
 		for i, one := range live.W {
-			_, wr0 := one.fm.Consume()
-			forward += wr0
+			c <- one
 
-			_, wr1 := one.bm.Consume()
-			backward += wr1
-
-			if one.closed {
-				// I don't understand how GC works, setting nil reference anyway
-				live.W[i] = nil
-			} else {
-				W = append(W, one)
+			if !one.closed {
+				lastGood += 1
+				live.W[i], live.W[lastGood] = live.W[lastGood], live.W[i]
 			}
 		}
+		live.W = live.W[0: lastGood + 1]
+		<-live.C
 
-		live.W = W
-	live.C <- true
+		close(c)
+	}()
 
-	return forward, backward, uint64(N)
+	forward, backward, N := uint64(0), uint64(0), 0
+	for one := range c {
+		_, f := one.fm.Consume()
+		_, b := one.bm.Consume()
+
+		forward += f
+		backward += b
+		N += 1
+	}
+
+	return forward, backward, N
 }
