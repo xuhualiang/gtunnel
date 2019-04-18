@@ -4,6 +4,7 @@ import (
 	"net"
 	"time"
 	"org/gtunnel/api"
+	"fmt"
 )
 
 type Wire struct {
@@ -70,7 +71,30 @@ func (live *Liveness) Add(wire *Wire)  {
 	<- live.C
 }
 
-func (live *Liveness) Measure() (uint64, uint64, int) {
+type Metrics struct {
+	forward  uint64
+	backward uint64
+	n        int
+}
+
+func (m *Metrics) Aggregate(f, b uint64)  {
+	m.forward += f
+	m.backward += b
+	m.n += 1
+}
+
+func (m *Metrics) Equas(other *Metrics) bool {
+	return m.forward == other.forward &&
+		m.backward == other.backward && m.n == other.n
+}
+
+func (m *Metrics) String() string {
+	return fmt.Sprintf("%d wires, foward: %.2f KB %.2f KB/s, backward: %.2f KB %.2f KB/s",
+		m.n, api.KB(m.forward), api.KBPS(m.forward, METER_PERIOD),
+		api.KB(m.backward), api.KBPS(m.backward, METER_PERIOD))
+}
+
+func (live *Liveness) Measure() Metrics {
 	c := make(chan *Wire)
 
 	go func() {
@@ -82,6 +106,8 @@ func (live *Liveness) Measure() (uint64, uint64, int) {
 			if !one.closed {
 				lastGood += 1
 				live.W[i], live.W[lastGood] = live.W[lastGood], live.W[i]
+			} else {
+				live.W[i] = nil
 			}
 		}
 		live.W = live.W[0: lastGood + 1]
@@ -90,15 +116,20 @@ func (live *Liveness) Measure() (uint64, uint64, int) {
 		close(c)
 	}()
 
-	forward, backward, N := uint64(0), uint64(0), 0
+	metrics := Metrics{}
 	for one := range c {
 		_, f := one.fm.Consume()
 		_, b := one.bm.Consume()
 
-		forward += f
-		backward += b
-		N += 1
+		if one.closed {
+			one.fm.Close()
+			one.bm.Close()
+			one.fwb.Close()
+			one.bwb.Close()
+		}
+
+		metrics.Aggregate(f, b)
 	}
 
-	return forward, backward, N
+	return metrics
 }

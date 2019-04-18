@@ -12,7 +12,7 @@ import (
 
 const (
 	IO_ALLOWANCE   = time.Millisecond * 100
-	METER_PERIOD   = time.Second * 10
+	METER_PERIOD   = time.Second * 2
 	BUF_SIZE       = 256 * 1024
 )
 
@@ -135,11 +135,13 @@ func main() {
 	}
 
 	time.Sleep(METER_PERIOD)
+	prevMetrics := Metrics{0, 0, -1}
 	for ticker := time.NewTicker(METER_PERIOD); ; <-ticker.C  {
-		forward, backward, N := live.Measure()
+		metrics := live.Measure()
 
-		fmt.Printf("%d wires, foward: %.2f KB %.2f KB/s, backward: %.2f KB %.2f KB/s\n",
-			N, api.KB(forward), api.KBPS(forward, METER_PERIOD),
-				api.KB(backward), api.KBPS(backward, METER_PERIOD))
+		if !metrics.Equas(&prevMetrics) {
+			fmt.Println(metrics.String())
+			prevMetrics = metrics
+		}
 	}
 }

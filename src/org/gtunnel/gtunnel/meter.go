@@ -35,3 +35,7 @@ func (m *meter) Consume() (rd, wr uint64) {
 func (m meter) String() string {
 	return fmt.Sprintf("rd=%d wr=%d", m.rd, m.wr)
 }
+
+func (m *meter) Close() {
+	close(m.C)
+}

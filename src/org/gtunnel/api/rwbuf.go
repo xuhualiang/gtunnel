@@ -73,3 +73,7 @@ func (rwb *RwBuf) Produce(n int) bool {
 
 	return rwb.Producible()
 }
+
+func (rwb *RwBuf) Close()  {
+	rwb.data = nil
+}
