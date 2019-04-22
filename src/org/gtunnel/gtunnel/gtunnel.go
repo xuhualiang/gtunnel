@@ -19,7 +19,6 @@ const (
 func redirectLoop(wire *Wire, cfg *Cfg, rwb *api.RwBuf, from net.Conn, to net.Conn, m *meter) {
 	for !wire.closed && !cfg.Timeout(wire.atime) {
 		rd, wr := 0, 0
-		touch := false
 
 		// 1 - read
 		b := rwb.ProducerBuffer()
@@ -38,7 +37,7 @@ func redirectLoop(wire *Wire, cfg *Cfg, rwb *api.RwBuf, from net.Conn, to net.Co
 				break
 			} else if rd > 0 {
 				rwb.Produce(rd)
-				touch = true
+				wire.Touch()
 			}
 		}
 
@@ -59,12 +58,8 @@ func redirectLoop(wire *Wire, cfg *Cfg, rwb *api.RwBuf, from net.Conn, to net.Co
 				break
 			} else if wr > 0 {
 				rwb.Consume(wr)
-				touch = true
+				wire.Touch()
 			}
-		}
-
-		if touch {
-			wire.Touch()
 		}
 
 		// 3. meter
@@ -139,7 +134,7 @@ func main() {
 	for ticker := time.NewTicker(METER_PERIOD); ; <-ticker.C  {
 		metrics := live.Measure()
 
-		if !metrics.Equas(&prevMetrics) {
+		if !metrics.Equals(&prevMetrics) {
 			fmt.Println(metrics.String())
 			prevMetrics = metrics
 		}

@@ -83,7 +83,7 @@ func (m *Metrics) Aggregate(f, b uint64)  {
 	m.n += 1
 }
 
-func (m *Metrics) Equas(other *Metrics) bool {
+func (m *Metrics) Equals(other *Metrics) bool {
 	return m.forward == other.forward &&
 		m.backward == other.backward && m.n == other.n
 }
