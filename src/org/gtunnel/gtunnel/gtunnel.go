@@ -1,142 +1,137 @@
 package main
 
 import (
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"net"
-	"time"
 	"os"
-	"math/rand"
-	"org/gtunnel/api"
+	"time"
 )
 
 const (
-	IO_ALLOWANCE   = time.Millisecond * 100
-	METER_PERIOD   = time.Second * 2
-	BUF_SIZE       = 256 * 1024
+	MeterPeriod   = time.Second * 2
+	BufSize       = 512 * 1024
+	DialAllowance = time.Second * 2
 )
 
-func redirectLoop(wire *Wire, cfg *Cfg, rwb *api.RwBuf, from net.Conn, to net.Conn, m *meter) {
-	for !wire.closed && !cfg.Timeout(wire.atime) {
-		rd, wr := 0, 0
+func parseArgs() (ls EndpointPairList, cert, key string, skipVerify bool) {
+	flag.CommandLine.Var(&ls, "pair", "Endpoint pair")
+	flag.StringVar(&cert,"cert", "", "certificate file")
+	flag.StringVar(&key, "key", "", "private key file")
+	flag.BoolVar(&skipVerify, "skip-verify", true, "skip verify")
+	flag.Parse()
+	return
+}
 
-		// 1 - read
-		b := rwb.ProducerBuffer()
-		if !wire.closed && len(b) > 0 {
-			var err error
+func main() {
+	ls, cert, key, skipVerify := parseArgs()
 
-			// don't block if rwb is consumable
-			deadline := time.Time{}
-			if !rwb.Consumable() {
-				deadline = api.Deadline(IO_ALLOWANCE)
-			}
-			from.SetReadDeadline(deadline)
+	meter := &Meter{}
+	for _, pair := range ls {
+		go listenLoop(pair, cert, key, skipVerify, meter)
+	}
 
-			rd, err = from.Read(b)
-			if err != nil && !api.IsTimeoutError(err) {
-				break
-			} else if rd > 0 {
-				rwb.Produce(rd)
-				wire.Touch()
-			}
+	time.Sleep(MeterPeriod)
+	prevMetrics := Measure{0, 0, 0}
+	for ticker := time.NewTicker(MeterPeriod); ; <-ticker.C  {
+		measure := meter.GetAndReset()
+
+		if !measure.Equals(&prevMetrics) {
+			fmt.Println(measure.String(MeterPeriod))
+			prevMetrics = measure
+		}
+	}
+}
+
+func redirectLoop(wire *Wire, from net.Conn, to net.Conn, master bool) {
+	buf := make([]byte, BufSize)
+
+	for !wire.closed {
+		sz, err := from.Read(buf)
+		if err != nil {
+			break
 		}
 
-		// 2 - write
-		b = rwb.ConsumerBuffer()
-		if !wire.closed && len(b) > 0 {
-			var err error
-
-			// don't block if rwb is producible
-			deadline := time.Time{}
-			if !rwb.Producible() {
-				deadline = api.Deadline(IO_ALLOWANCE)
-			}
-			to.SetWriteDeadline(deadline)
-
-			wr, err = to.Write(b)
-			if err != nil && !api.IsTimeoutError(err)  {
-				break
-			} else if wr > 0 {
-				rwb.Consume(wr)
-				wire.Touch()
-			}
+		if err := sendFull(to, buf[:sz]); err != nil {
+			break
 		}
 
 		// 3. meter
-		m.Produce(rd, wr)
+		if master {
+			wire.Meter(sz, 0)
+		} else {
+			wire.Meter(0, sz)
+		}
 	}
 
-	if !wire.closed {
-		fmt.Printf("D connection %s\n", wire)
+	if master {
 		wire.Close()
 	}
 }
 
-func listenLoop(cfg *Cfg, live *Liveness) {
-	listenSock, err := api.Listen(cfg.Accept, cfg.Cert(), cfg.Key())
+func listenLoop(pair EndpointPair, cert, key string, skipVerify bool, m *Meter) {
+	listenSock, err := listenOn(pair.Src, cert, key)
 	if err != nil {
-		fmt.Printf("failed to listen on %s, error - %s\n", cfg, err)
-		return
+		fmt.Printf("failed to listen on %s, error=%s\n", pair.Src, err)
+		os.Exit(-1)
 	}
-	fmt.Printf("listening on %s\n", cfg)
-
-	lb := MkLoadBalancer(cfg.Connect)
+	fmt.Printf("listening on %s\n", pair.Src)
 
 	for {
-		in, err := listenSock.Accept()
+		fromConn, err := listenSock.Accept()
 		if err != nil {
-			fmt.Printf("failed to accept %s, error - %s\n", cfg.Accept, err)
+			fmt.Printf("accept error=%s\n", err)
 			continue
 		}
+
 		go func() {
-			ep := lb.Pick(api.DIAL_ALLOWANCE)
-			if ep == nil {
-				in.Close()
-				fmt.Printf("failed to discover endpoint")
-				return
-			}
-
-			out, err := api.Dial(ep, cfg.SkipVerify())
+			toConn, err := dialTo(pair.Dst, skipVerify)
 			if err != nil {
-				in.Close()
-				fmt.Printf("failed to wire %s, error - %s\n", cfg, err)
+				fromConn.Close()
+				fmt.Printf("failed to connect %s, error=%s\n", pair.Dst, err)
 				return
 			}
 
-			wire := mkWire(cfg, in, out)
-			go redirectLoop(wire, cfg, wire.fwb, wire.src, wire.dst, wire.fm)
-			go redirectLoop(wire, cfg, wire.bwb, wire.dst, wire.src, wire.bm)
-
-			live.Add(wire)
-			fmt.Printf("U connection %s (%s)\n", wire, ep)
-		}()
+			wire := mkWire(fromConn, toConn)
+			go redirectLoop(wire, wire.src, wire.dst, true)
+			go redirectLoop(wire, wire.dst, wire.src, false)
+			m.Append(wire)
+		} ()
 	}
 }
 
-func main() {
-	cfg := Configuration{}
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage of %s: [path-to-config-file]+\n", os.Args[0])
+func listenOn(ep Endpoint, cert, key string) (net.Listener, error) {
+	if ep.IsSecure() {
+		cert, err := tls.LoadX509KeyPair(cert, key)
+		if err != nil {
+			return nil, err
+		}
+		cfg := tls.Config{Certificates: []tls.Certificate{cert}}
+		return tls.Listen("tcp", ep.Addr(), &cfg)
+	} else {
+		return net.Listen("tcp", ep.Addr())
 	}
-	flag.Parse()
-	rand.Seed(time.Now().Unix())
+}
 
-	err := cfg.Load(flag.Args())
-	api.Assert(err == nil, fmt.Sprintf("failed to load configuration %s", err))
+func dialTo(ep Endpoint, skipVerify bool) (net.Conn, error) {
+	if ep.IsSecure() {
+		cfg := tls.Config{InsecureSkipVerify: skipVerify}
+		dialer := net.Dialer{Timeout: DialAllowance}
 
-	live := NewLiveness()
-	for i, _ := range cfg.Set {
-		go listenLoop(cfg.Set[i], live)
+		return tls.DialWithDialer(&dialer, "tcp", ep.Addr(), &cfg)
+	} else {
+		return net.DialTimeout("tcp", ep.Addr(), DialAllowance)
 	}
+}
 
-	time.Sleep(METER_PERIOD)
-	prevMetrics := Metrics{0, 0, -1}
-	for ticker := time.NewTicker(METER_PERIOD); ; <-ticker.C  {
-		metrics := live.Measure()
-
-		if !metrics.Equals(&prevMetrics) {
-			fmt.Println(metrics.String())
-			prevMetrics = metrics
+func sendFull(c net.Conn, buf []byte) error {
+	for snd := 0; snd < len(buf); {
+		if wr, err := c.Write(buf[snd:]); err != nil {
+			return err
+		} else {
+			snd += wr
 		}
 	}
+	return nil
 }

@@ -1,135 +1,128 @@
 package main
 
 import (
-	"net"
-	"time"
-	"org/gtunnel/api"
 	"fmt"
+	"net"
+	"sync"
+	"time"
 )
 
 type Wire struct {
-	cfg *Cfg
 	src net.Conn
 	dst net.Conn
-
-	fwb *api.RwBuf
-	bwb *api.RwBuf
 
 	atime  time.Time
 	closed bool
 
-	fm *meter
-	bm *meter
+	sndBytes uint64
+	rcvBytes uint64
+	mtx      sync.Mutex
 }
 
 func (wire *Wire) Close() {
+	wire.mtx.Lock()
+	defer wire.mtx.Unlock()
+
 	wire.closed = true
 	wire.src.Close()
 	wire.dst.Close()
 }
 
-func mkWire(cfg *Cfg, src net.Conn, dst net.Conn) *Wire {
-	wire := &Wire{
-		cfg:    cfg,
+func mkWire(src net.Conn, dst net.Conn) *Wire {
+	return &Wire{
 		src:    src,
 		dst:    dst,
-		fwb:    api.MkRWBuf(BUF_SIZE),
-		bwb:    api.MkRWBuf(BUF_SIZE),
 		atime:  time.Now(),
 		closed: false,
-		fm:     NewMeter(),
-		bm:     NewMeter(),
 	}
-
-	return wire
 }
 
-func (wire *Wire) Touch()  {
+func (wire *Wire) Meter(snd, rcv int) {
+	wire.mtx.Lock()
+	defer wire.mtx.Unlock()
+
+	wire.sndBytes += uint64(snd)
+	wire.rcvBytes += uint64(rcv)
 	wire.atime = time.Now()
 }
 
-func (wire Wire) String() string {
-	return wire.cfg.String()
+func (wire *Wire) GetAndReset() (snd, rcv uint64, closed bool) {
+	wire.mtx.Lock()
+	defer wire.mtx.Unlock()
+
+	snd, rcv = wire.sndBytes, wire.rcvBytes
+	wire.sndBytes, wire.rcvBytes = 0, 0
+	closed = wire.closed
+	return
 }
 
-type Liveness struct {
-	W []*Wire
-	C chan bool
+type Measure struct {
+	sndBytes uint64
+	rcvBytes uint64
+	nConn    int
 }
 
-func NewLiveness() *Liveness {
-	live := &Liveness{
-		W: make([]*Wire, 0),
-		C: make(chan bool, 1),
-	}
-	return live
+func (m *Measure) Equals(other *Measure) bool {
+	return m.sndBytes == other.sndBytes &&
+		m.rcvBytes == other.rcvBytes && m.nConn == other.nConn
 }
 
-func (live *Liveness) Add(wire *Wire)  {
-	live.C <- true
-	live.W = append(live.W, wire)
-	<- live.C
+func (m *Measure) String(d time.Duration) string {
+	return fmt.Sprintf("%d wires, send: %s, recv: %s",
+		m.nConn, normalize(m.sndBytes, d), normalize(m.rcvBytes, d))
 }
 
-type Metrics struct {
-	forward  uint64
-	backward uint64
-	n        int
-}
-
-func (m *Metrics) Aggregate(f, b uint64)  {
-	m.forward += f
-	m.backward += b
-	m.n += 1
-}
-
-func (m *Metrics) Equals(other *Metrics) bool {
-	return m.forward == other.forward &&
-		m.backward == other.backward && m.n == other.n
-}
-
-func (m *Metrics) String() string {
-	return fmt.Sprintf("%d wires, foward: %.2f KB %.2f KB/s, backward: %.2f KB %.2f KB/s",
-		m.n, api.KB(m.forward), api.KBPS(m.forward, METER_PERIOD),
-		api.KB(m.backward), api.KBPS(m.backward, METER_PERIOD))
-}
-
-func (live *Liveness) Measure() Metrics {
-	c := make(chan *Wire)
-
-	go func() {
-		live.C <- true
-		lastGood := -1
-		for i, one := range live.W {
-			c <- one
-
-			if !one.closed {
-				lastGood += 1
-				live.W[i], live.W[lastGood] = live.W[lastGood], live.W[i]
-			} else {
-				live.W[i] = nil
-			}
-		}
-		live.W = live.W[0: lastGood + 1]
-		<-live.C
-
-		close(c)
-	}()
-
-	metrics := Metrics{}
-	for one := range c {
-		_, f := one.fm.Consume()
-		_, b := one.bm.Consume()
-
-		if one.closed {
-			one.fm.Close()
-			one.bm.Close()
-			one.fwb.Close()
-			one.bwb.Close()
-		}
-
-		metrics.Aggregate(f, b)
+func normalize(b uint64, d time.Duration) string {
+	if b >= 1024 * 1024 {
+		f := float64(b) / 1024 / 1024
+		return fmt.Sprintf("%.2f MB %.2f MB/s", f, f/d.Seconds())
 	}
 
-	return metrics
+	f := float64(b) / 1024
+	return fmt.Sprintf("%.2f KB %.2f KB/s", f, f/d.Seconds());
+}
+
+type Meter struct {
+	ls   []*Wire
+	mtx  sync.Mutex
+}
+
+func (m *Meter) Append(wire *Wire) {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
+
+	m.ls = append(m.ls, wire)
+}
+
+func (m *Meter) GetAndReset() Measure {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
+
+	r := Measure{
+		sndBytes: 0,
+		rcvBytes: 0,
+		nConn:    len(m.ls),
+	}
+
+	nextGoodWire := 0
+	for i := 0; i < len(m.ls); i += 1 {
+		snd, rcv, closed := m.ls[i].GetAndReset()
+		r.sndBytes += snd
+		r.rcvBytes += rcv
+
+		if closed {
+			m.ls[nextGoodWire], m.ls[i] = m.ls[i], m.ls[nextGoodWire]
+			nextGoodWire += 1
+		}
+	}
+
+	if nextGoodWire > 0 {
+		m.ls = m.ls[nextGoodWire:]
+	}
+	return r
+}
+
+type T struct {
+	b uint64
+	d time.Duration
 }
