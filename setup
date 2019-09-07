@@ -1,2 +1,0 @@
-alias receiver="./bin/dpipe -in localhost:10002 -out /dev/null"
-alias sender="./bin/dpipe -in /dev/zero -out localhost:10001 -size 1073741"
