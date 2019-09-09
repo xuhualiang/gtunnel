@@ -12,18 +12,38 @@ import (
 
 const (
 	DataSize       = 1024 * 1024 * 8
-	ThroughputLoop = 64
-	LatencyLoop    = 4096
 )
 
-func parseArgs() string {
+func parseArgs() (string, int, int) {
 	ep := flag.String("ep", "127.0.0.1:10002", "endpoint")
+	loop := flag.Int("loop", 16, "loops of 8MB data")
+	dup := flag.Int("dup", 1, "number of concurrently running duplicated workload")
+
 	flag.Parse()
-	return *ep
+	return *ep, *loop, *dup
 }
 
 func main() {
-	ep := parseArgs()
+	ep, loop, dup := parseArgs()
+	t0 := time.Now()
+	done := make(chan struct{}, loop)
+
+	for i := 0; i < dup; i += 1 {
+		go throughput(loop, ep, done)
+	}
+
+	// wait for all done
+	for i := 0; i < dup; i += 1 {
+		<-done
+	}
+
+	duration := time.Now().Sub(t0)
+	fmt.Printf("thoughput: %s\n", normalize(DataSize*uint64(loop*dup), duration))
+}
+
+func throughput(loop int, ep string, done chan struct{}) {
+	data := make([]byte, DataSize)
+	rand.Read(data)
 
 	conn, err := net.Dial("tcp", ep)
 	if err != nil {
@@ -31,18 +51,9 @@ func main() {
 		os.Exit(-1)
 	}
 
-	throughput(conn)
-	latency(conn)
-}
-
-func throughput(conn net.Conn) {
-	data := make([]byte, DataSize)
-	rand.Read(data)
-	t0 := time.Now()
-
 	// send routing
 	go func() {
-		for i := 0; i < ThroughputLoop; i += 1 {
+		for i := 0; i < loop; i += 1 {
 			if err := sendFull(conn, data); err != nil {
 				fmt.Printf("failed to send data err=%s", err)
 				os.Exit(-1)
@@ -51,40 +62,19 @@ func throughput(conn net.Conn) {
 	}()
 	// recv loop
 	buf := make([]byte, DataSize)
-	for i := 0; i < ThroughputLoop; i += 1 {
+	for i := 0; i < loop; i += 1 {
 		if err := recvFull(conn, buf); err != nil {
 			fmt.Printf("failed to recv data err=%s\n", err)
 			os.Exit(-1)
 		}
 	}
-	duration := time.Now().Sub(t0)
-	fmt.Printf("%s\n", normalize(DataSize*ThroughputLoop, duration))
+
 	if bytes.Compare(data, buf) != 0 {
-		fmt.Printf("but wait, data corrupted\n")
+		fmt.Printf("data corrupted\n")
 		os.Exit(-1)
 	}
-}
 
-func latency(conn net.Conn) {
-	data := make([]byte, 32)
-	t0 := time.Now()
-
-	for i := 0; i < LatencyLoop; i += 1 {
-		if err := sendFull(conn, data); err != nil {
-			fmt.Printf("failed to send err=%s\n", err)
-			os.Exit(-1)
-		}
-
-		if err := recvFull(conn, data); err != nil {
-			fmt.Printf("failed to recv err=%s\n", err)
-			os.Exit(-1)
-		}
-	}
-
-	d := time.Now().Sub(t0)
-
-	fmt.Printf("%.2f seconds, %d messages, %.2f milli sec/message\n",
-		d.Seconds(), LatencyLoop, float64(d/time.Millisecond)/LatencyLoop)
+	done <- struct {}{}
 }
 
 func sendFull(conn net.Conn, buf []byte) error {
