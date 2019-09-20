@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"runtime"
 	"time"
 )
 
@@ -15,21 +16,22 @@ const (
 	DialAllowance = time.Second * 2
 )
 
-func parseArgs() (ls EndpointPairList, cert, key string, skipVerify bool) {
+func parseArgs() (ls EndpointPairList, cert, key string, verifyOpt VerifyOpt) {
 	flag.CommandLine.Var(&ls, "pair", "Endpoint pair")
 	flag.StringVar(&cert,"cert", "", "certificate file")
 	flag.StringVar(&key, "key", "", "private key file")
-	flag.BoolVar(&skipVerify, "skip-verify", true, "skip verify")
+	flag.CommandLine.Var(&verifyOpt, "verify", "ca=file:servername=hello.com")
 	flag.Parse()
 	return
 }
 
 func main() {
-	ls, cert, key, skipVerify := parseArgs()
+	fmt.Printf("go-version: %s %v\n", runtime.Version(), os.Args)
+	ls, cert, key, verifyOpt := parseArgs()
 
 	meter := &Meter{}
 	for _, pair := range ls {
-		go listenLoop(pair, cert, key, skipVerify, meter)
+		go listenLoop(pair, cert, key, verifyOpt, meter)
 	}
 
 	time.Sleep(MeterPeriod)
@@ -70,7 +72,7 @@ func redirectLoop(wire *Wire, from net.Conn, to net.Conn, master bool) {
 	}
 }
 
-func listenLoop(pair EndpointPair, cert, key string, skipVerify bool, m *Meter) {
+func listenLoop(pair EndpointPair, cert, key string, verifyOpt VerifyOpt, m *Meter) {
 	listenSock, err := listenOn(pair.Src, cert, key)
 	if err != nil {
 		fmt.Printf("failed to listen on %s, error=%s\n", pair.Src, err)
@@ -86,7 +88,7 @@ func listenLoop(pair EndpointPair, cert, key string, skipVerify bool, m *Meter) 
 		}
 
 		go func() {
-			toConn, err := dialTo(pair.Dst, skipVerify)
+			toConn, err := dialTo(pair.Dst, verifyOpt)
 			if err != nil {
 				fromConn.Close()
 				fmt.Printf("failed to connect %s, error=%s\n", pair.Dst, err)
@@ -114,9 +116,13 @@ func listenOn(ep Endpoint, cert, key string) (net.Listener, error) {
 	}
 }
 
-func dialTo(ep Endpoint, skipVerify bool) (net.Conn, error) {
+func dialTo(ep Endpoint, verifyOpt VerifyOpt) (net.Conn, error) {
 	if ep.IsSecure() {
-		cfg := tls.Config{InsecureSkipVerify: skipVerify}
+		cfg := tls.Config{
+			InsecureSkipVerify: !verifyOpt.DoVerify,
+			RootCAs: verifyOpt.RootCA,
+			ServerName: verifyOpt.ServerName,
+		}
 		dialer := net.Dialer{Timeout: DialAllowance}
 
 		return tls.DialWithDialer(&dialer, "tcp", ep.Addr(), &cfg)
