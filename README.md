@@ -1,7 +1,7 @@
 # gtunnel
 `gtunnel` is a proxy that translates existing socket into SSL/TLS. It is a `golang` implementation that replaces `stunnel`. We benefit from efficient `goroutine`. we cross plantforms with a few hundred lines of go code.
 
-Unlike `stunnel`, `gtunnel` is simple enough, efficent and scalable. Detailed measurement will be placed. Contact `hualiang.xu@gmail.com` for more.
+Unlike `stunnel`, `gtunnel` is simple enough, efficent and scalable. Detailed measurement will be placed.
 
 ## socket to socket redirection
 ```
@@ -71,4 +71,4 @@ openssl req -newkey rsa:2048 -nodes \
 0.38 seconds, 4096 messages, 0.09 milli sec/message
 ```
 
-## want a mutual and customized certificate verification? Reach out to hualiang.xu@gmail.com.
+## want a mutual and customized certificate verification? Reach out to aihua.yang@aliyun.com
