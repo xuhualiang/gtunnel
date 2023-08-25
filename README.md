@@ -70,5 +70,3 @@ openssl req -newkey rsa:2048 -nodes \
 512.00 MB 638.92 MB/s
 0.38 seconds, 4096 messages, 0.09 milli sec/message
 ```
-
-## want a mutual and customized certificate verification? Reach out to aihua.yang@aliyun.com
