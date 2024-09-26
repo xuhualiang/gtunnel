@@ -18,7 +18,7 @@ const (
 
 func parseArgs() (ls EndpointPairList, cert, key string, verifyOpt VerifyOpt) {
 	flag.CommandLine.Var(&ls, "pair", "Endpoint pair")
-	flag.StringVar(&cert,"cert", "", "certificate file")
+	flag.StringVar(&cert, "cert", "", "certificate file")
 	flag.StringVar(&key, "key", "", "private key file")
 	flag.CommandLine.Var(&verifyOpt, "verify", "ca=file:servername=hello.com")
 	flag.Parse()
@@ -36,7 +36,7 @@ func main() {
 
 	time.Sleep(MeterPeriod)
 	prevMetrics := Measure{0, 0, 0}
-	for ticker := time.NewTicker(MeterPeriod); ; <-ticker.C  {
+	for ticker := time.NewTicker(MeterPeriod); ; <-ticker.C {
 		measure := meter.GetAndReset()
 
 		if !measure.Equals(&prevMetrics) {
@@ -52,6 +52,8 @@ func redirectLoop(wire *Wire, from net.Conn, to net.Conn, master bool) {
 	for !wire.closed {
 		sz, err := from.Read(buf)
 		if err != nil {
+			// Terminate if either side of the connection closes
+			wire.Close()
 			break
 		}
 
@@ -65,10 +67,6 @@ func redirectLoop(wire *Wire, from net.Conn, to net.Conn, master bool) {
 		} else {
 			wire.Meter(0, sz)
 		}
-	}
-
-	if master {
-		wire.Close()
 	}
 }
 
@@ -99,18 +97,17 @@ func listenLoop(pair EndpointPair, cert, key string, verifyOpt VerifyOpt, m *Met
 			go redirectLoop(wire, wire.src, wire.dst, true)
 			go redirectLoop(wire, wire.dst, wire.src, false)
 			m.Append(wire)
-		} ()
+		}()
 	}
 }
 
 func listenOn(ep Endpoint, cert, key string) (net.Listener, error) {
 	if ep.IsSecure() {
-		cert, err := tls.LoadX509KeyPair(cert, key)
+		cfg, err := getTlsConfig(cert, key)
 		if err != nil {
 			return nil, err
 		}
-		cfg := tls.Config{Certificates: []tls.Certificate{cert}}
-		return tls.Listen("tcp", ep.Addr(), &cfg)
+		return tls.Listen("tcp", ep.Addr(), cfg)
 	} else {
 		return net.Listen("tcp", ep.Addr())
 	}
@@ -120,8 +117,8 @@ func dialTo(ep Endpoint, verifyOpt VerifyOpt) (net.Conn, error) {
 	if ep.IsSecure() {
 		cfg := tls.Config{
 			InsecureSkipVerify: !verifyOpt.DoVerify,
-			RootCAs: verifyOpt.RootCA,
-			ServerName: verifyOpt.ServerName,
+			RootCAs:            verifyOpt.RootCA,
+			ServerName:         verifyOpt.ServerName,
 		}
 		dialer := net.Dialer{Timeout: DialAllowance}
 
@@ -140,4 +137,27 @@ func sendFull(c net.Conn, buf []byte) error {
 		}
 	}
 	return nil
+}
+
+// Returns a default TLS1.3 config
+func getTlsConfig(cert, key string) (*tls.Config, error) {
+	c, err := tls.LoadX509KeyPair(cert, key)
+	if err != nil {
+		return nil, err
+	}
+
+	cfg := &tls.Config{
+		MinVersion:               tls.VersionTLS13,
+		CurvePreferences:         []tls.CurveID{tls.CurveP521, tls.CurveP384, tls.CurveP256},
+		PreferServerCipherSuites: true,
+		CipherSuites: []uint16{
+			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+			tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+		},
+		Certificates: []tls.Certificate{c},
+	}
+
+	return cfg, err
 }
